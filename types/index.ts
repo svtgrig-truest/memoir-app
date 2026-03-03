@@ -57,4 +57,13 @@ export interface HeritageDoc {
   uploaded_at: string;
 }
 
+export interface SessionMedia {
+  id: string;
+  session_id: string;
+  file_url: string;
+  mime_type: string | null;
+  ai_caption: string | null;
+  created_at: string;
+}
+
 export type OrbState = 'idle' | 'listening' | 'speaking' | 'thinking';
