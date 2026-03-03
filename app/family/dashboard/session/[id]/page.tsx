@@ -30,7 +30,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
             {(chapter?.title_ru as string) ?? 'Свободный разговор'}
           </h1>
           <p className="text-white/40 text-sm">
-            {new Date(session.started_at as string).toLocaleDateString('ru-RU', {
+            {new Date(sessionData.started_at as string).toLocaleDateString('ru-RU', {
               day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
             })}
           </p>

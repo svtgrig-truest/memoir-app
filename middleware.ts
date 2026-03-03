@@ -11,5 +11,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/family/dashboard/:path*'],
+  matcher: ['/family/dashboard/:path*', '/api/export'],
 };
