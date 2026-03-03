@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { jsPDF } from 'jspdf';
+import fs from 'fs';
+import path from 'path';
+
+// Load Cyrillic font once at module level
+let cyrillicFontBase64: string | null = null;
+let cyrillicFontName: string | null = null;
+
+function loadCyrillicFont(): { name: string; data: string } | null {
+  if (cyrillicFontBase64 && cyrillicFontName) {
+    return { name: cyrillicFontName, data: cyrillicFontBase64 };
+  }
+  const candidates = [
+    { file: 'public/fonts/PTSans-Regular.ttf', name: 'PTSans-Regular.ttf' },
+    { file: 'public/fonts/ArialUnicode.ttf', name: 'ArialUnicode.ttf' },
+  ];
+  for (const candidate of candidates) {
+    const filePath = path.join(process.cwd(), candidate.file);
+    if (fs.existsSync(filePath)) {
+      cyrillicFontBase64 = fs.readFileSync(filePath).toString('base64');
+      cyrillicFontName = candidate.name;
+      return { name: candidate.name, data: cyrillicFontBase64 };
+    }
+  }
+  return null;
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -44,10 +69,21 @@ export async function GET(req: NextRequest) {
     const date = new Date(session?.started_at as string).toLocaleDateString('ru-RU');
 
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-    doc.setFont('helvetica', 'bold');
+
+    // Embed Cyrillic font if available
+    const font = loadCyrillicFont();
+    if (font) {
+      doc.addFileToVFS(font.name, font.data);
+      doc.addFont(font.name, 'CyrillicFont', 'normal');
+      doc.setFont('CyrillicFont');
+    } else {
+      // Fallback: helvetica (Cyrillic will be broken, but at least PDF generates)
+      doc.setFont('helvetica', 'normal');
+    }
+
     doc.setFontSize(18);
+    // Bold isn't available without separate bold font; just use same font
     doc.text(title, 20, 25);
-    doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(150);
     doc.text(date, 20, 33);
@@ -55,7 +91,19 @@ export async function GET(req: NextRequest) {
     doc.setFontSize(12);
 
     const lines = doc.splitTextToSize(transcript.polished_text ?? '', 170);
-    doc.text(lines, 20, 45);
+    let y = 45;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const lineHeight = 7;
+
+    for (const line of lines) {
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, 20, y);
+      y += lineHeight;
+    }
 
     const pdfBuffer = doc.output('arraybuffer');
     return new NextResponse(pdfBuffer, {
