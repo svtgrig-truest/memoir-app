@@ -37,12 +37,16 @@ export async function POST(req: NextRequest) {
 
   const summaryText = summaryRes.choices[0].message.content ?? '';
 
-  await supabaseAdmin.from('heritage_docs').insert({
+  const { error: insertError } = await supabaseAdmin.from('heritage_docs').insert({
     filename: file.name,
     file_url: publicUrl,
     mime_type: file.type,
     summary_text: summaryText,
   });
+
+  if (insertError) {
+    return NextResponse.json({ error: 'Failed to save document record' }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, summary: summaryText });
 }

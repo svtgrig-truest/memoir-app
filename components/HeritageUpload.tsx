@@ -18,8 +18,8 @@ export function HeritageUpload() {
       const res = await fetch('/api/heritage', { method: 'POST', body: formData });
       if (!res.ok) throw new Error('Upload failed');
       setMessage('Документ загружен и обработан');
-      // Reload to show new doc in list
-      window.location.reload();
+      // Brief delay so user sees the success message before reload
+      setTimeout(() => window.location.reload(), 800);
     } catch {
       setMessage('Ошибка загрузки');
     } finally {
