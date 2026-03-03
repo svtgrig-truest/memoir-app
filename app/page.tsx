@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { VoiceOrb } from '@/components/VoiceOrb';
 import { ChapterSidebar } from '@/components/ChapterSidebar';
 import { TextInputBar } from '@/components/TextInputBar';
 import { supabase } from '@/lib/supabase/client';
+import { connectToRealtime, buildSystemPrompt, RealtimeConnection, TurnMessage } from '@/lib/realtime';
 import { Chapter, OrbState } from '@/types';
 import { Pause, X } from 'lucide-react';
 
@@ -12,6 +13,9 @@ export default function Home() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const connectionRef = useRef<RealtimeConnection | null>(null);
+  const messagesRef = useRef<TurnMessage[]>([]);
 
   useEffect(() => {
     supabase
@@ -24,27 +28,112 @@ export default function Home() {
       });
   }, []);
 
-  const handleOrbClick = () => {
-    if (!isSessionActive) {
+  const handleOrbClick = async () => {
+    if (isSessionActive) return;
+    setOrbState('thinking');
+
+    try {
+      // Fetch heritage summaries and recent session summaries for system prompt
+      const [{ data: docs }, { data: transcripts }] = await Promise.all([
+        supabase.from('heritage_docs').select('summary_text'),
+        supabase
+          .from('transcripts')
+          .select('session_summary')
+          .not('session_summary', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(3),
+      ]);
+
+      const heritageSummary =
+        docs?.map((d) => d.summary_text).filter(Boolean).join('\n') ?? null;
+      const sessionSummaries =
+        transcripts?.map((t) => t.session_summary as string).filter(Boolean) ?? [];
+      const chapterTitle =
+        chapters.find((c) => c.id === selectedChapterId)?.title_ru ?? null;
+
+      const systemPrompt = buildSystemPrompt({ chapterTitle, heritageSummary, sessionSummaries });
+
+      // Get ephemeral token + create session record
+      const tokenRes = await fetch('/api/session-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chapter_id: selectedChapterId }),
+      });
+
+      if (!tokenRes.ok) throw new Error('Failed to get session token');
+      const { client_secret, session_id } = await tokenRes.json();
+      setSessionId(session_id);
+      messagesRef.current = [];
+
+      // Connect WebRTC to OpenAI Realtime API
+      const conn = await connectToRealtime(
+        client_secret.value,
+        systemPrompt,
+        (event) => {
+          // Drive orb animation from OpenAI events
+          if (event.type === 'input_audio_buffer.speech_started') setOrbState('listening');
+          if (event.type === 'response.created') setOrbState('thinking');
+          if (event.type === 'response.audio.delta') setOrbState('speaking');
+          if (event.type === 'response.audio.done') setOrbState('listening');
+
+          // Capture transcript turns
+          if (event.type === 'conversation.item.created') {
+            const item = event.item as Record<string, unknown>;
+            const content = (item.content as Array<Record<string, unknown>>)?.[0];
+            const text = (content?.transcript ?? content?.text ?? '') as string;
+            if (text && (item.role === 'user' || item.role === 'assistant')) {
+              messagesRef.current = [
+                ...messagesRef.current,
+                { role: item.role as string, text },
+              ];
+            }
+          }
+        }
+      );
+
+      connectionRef.current = conn;
       setIsSessionActive(true);
       setOrbState('listening');
-      // TODO Task 4: connect to OpenAI Realtime API
+    } catch (err) {
+      console.error('Failed to start session:', err);
+      setOrbState('idle');
     }
   };
 
-  const handlePause = () => {
+  const handlePause = async () => {
+    connectionRef.current?.disconnect();
+    connectionRef.current = null;
     setOrbState('idle');
     setIsSessionActive(false);
-    // TODO Task 4: pause session
+
+    if (sessionId) {
+      await supabase
+        .from('sessions')
+        .update({ status: 'paused' })
+        .eq('id', sessionId);
+    }
   };
 
-  const handleEnd = () => {
+  const handleEnd = async () => {
+    connectionRef.current?.disconnect();
+    connectionRef.current = null;
     setOrbState('idle');
     setIsSessionActive(false);
-    // TODO Task 4: end session + trigger pipeline
+
+    if (sessionId && messagesRef.current.length > 0) {
+      // Fire-and-forget: trigger post-session pipeline
+      fetch('/api/session-end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
+      }).catch((err) => console.error('Session-end pipeline failed:', err));
+    }
+
+    setSessionId(null);
+    messagesRef.current = [];
   };
 
-  const selectedChapterTitle = chapters.find(c => c.id === selectedChapterId)?.title_ru;
+  const selectedChapterTitle = chapters.find((c) => c.id === selectedChapterId)?.title_ru;
 
   return (
     <main className="min-h-screen bg-zinc-950 flex flex-col items-center justify-between relative overflow-hidden">
@@ -91,8 +180,8 @@ export default function Home() {
 
       <div className="relative w-full max-w-lg px-4 pb-8">
         <TextInputBar
-          onSendText={(t) => console.log('text:', t)}
-          onAttach={(f) => console.log('files:', f)}
+          onSendText={(t) => console.log('text:', t)}   // TODO Task 6
+          onAttach={(f) => console.log('files:', f)}    // TODO Task 6
           isMicActive={isSessionActive}
           onToggleMic={handleOrbClick}
           disabled={false}
