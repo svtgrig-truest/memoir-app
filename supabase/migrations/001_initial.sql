@@ -89,6 +89,7 @@ create table session_media (
 );
 
 -- RLS: disable for now (personal app)
+alter table users disable row level security;
 alter table sessions disable row level security;
 alter table messages disable row level security;
 alter table transcripts disable row level security;

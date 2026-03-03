@@ -36,11 +36,13 @@ export interface Transcript {
   polished_text: string | null;
   session_summary: string | null;
   polished_at: string | null;
+  created_at: string;
 }
 
 export interface Comment {
   id: string;
   transcript_id: string;
+  user_id: string | null;
   anchor_text: string | null;
   body: string;
   created_at: string;
@@ -50,7 +52,9 @@ export interface HeritageDoc {
   id: string;
   filename: string;
   file_url: string;
+  mime_type: string | null;
   summary_text: string | null;
+  uploaded_at: string;
 }
 
 export type OrbState = 'idle' | 'listening' | 'speaking' | 'thinking';
