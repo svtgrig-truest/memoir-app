@@ -18,7 +18,10 @@ export default function Home() {
       .from('chapters')
       .select('*')
       .order('display_order')
-      .then(({ data }) => data && setChapters(data));
+      .then(({ data, error }) => {
+        if (error) console.error('Failed to load chapters:', error.message);
+        if (data) setChapters(data);
+      });
   }, []);
 
   const handleOrbClick = () => {

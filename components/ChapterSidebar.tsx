@@ -62,7 +62,11 @@ export function ChapterSidebar({ chapters, completedIds, selectedId, onSelect }:
             ))}
           </nav>
 
-          <button className="mt-6 flex items-center gap-2 text-white/40 hover:text-white/70 text-sm transition-colors">
+          {/* TODO Task 5: wire to session pipeline to create custom chapter */}
+          <button
+            type="button"
+            className="mt-6 flex items-center gap-2 text-white/40 hover:text-white/70 text-sm transition-colors"
+          >
             <Plus className="w-4 h-4" /> Новая тема
           </button>
         </Dialog.Content>

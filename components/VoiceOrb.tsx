@@ -30,9 +30,9 @@ const orbVariants: Record<OrbState, TargetAndTransition> = {
 };
 
 export function VoiceOrb({ state, onClick }: Props) {
+  // TODO Task 4: update aria-label per state ("Идёт запись" when listening, etc.)
   return (
     <button
-      role="button"
       onClick={onClick}
       className="relative flex items-center justify-center w-48 h-48 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
       aria-label="Начать разговор"
