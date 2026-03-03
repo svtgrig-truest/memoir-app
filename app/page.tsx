@@ -133,6 +133,58 @@ export default function Home() {
     messagesRef.current = [];
   };
 
+  const handleSendText = (text: string) => {
+    if (!connectionRef.current?.dc || connectionRef.current.dc.readyState !== 'open') return;
+
+    connectionRef.current.dc.send(
+      JSON.stringify({
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text }],
+        },
+      })
+    );
+    connectionRef.current.dc.send(JSON.stringify({ type: 'response.create' }));
+
+    // Track in messages ref
+    messagesRef.current = [...messagesRef.current, { role: 'user', text }];
+  };
+
+  const handleAttach = async (files: FileList) => {
+    if (!sessionId) return;
+
+    for (const file of Array.from(files)) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('session_id', sessionId);
+
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (!res.ok) {
+        console.error('Upload failed for', file.name);
+        continue;
+      }
+
+      // Notify the AI about the attachment via data channel
+      if (connectionRef.current?.dc?.readyState === 'open') {
+        const caption = `Пользователь прикрепил файл: ${file.name}`;
+        connectionRef.current.dc.send(
+          JSON.stringify({
+            type: 'conversation.item.create',
+            item: {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: caption }],
+            },
+          })
+        );
+        connectionRef.current.dc.send(JSON.stringify({ type: 'response.create' }));
+        messagesRef.current = [...messagesRef.current, { role: 'user', text: caption }];
+      }
+    }
+  };
+
   const selectedChapterTitle = chapters.find((c) => c.id === selectedChapterId)?.title_ru;
 
   return (
@@ -180,8 +232,8 @@ export default function Home() {
 
       <div className="relative w-full max-w-lg px-4 pb-8">
         <TextInputBar
-          onSendText={(t) => console.log('text:', t)}   // TODO Task 6
-          onAttach={(f) => console.log('files:', f)}    // TODO Task 6
+          onSendText={handleSendText}
+          onAttach={handleAttach}
           isMicActive={isSessionActive}
           onToggleMic={handleOrbClick}
           disabled={false}
