@@ -23,19 +23,23 @@ export async function POST(req: NextRequest) {
 
   const { data: { publicUrl } } = supabaseAdmin.storage.from('media').getPublicUrl(storagePath);
 
-  // Extract text for summary (works for .txt; PDF/DOCX will need parsing later)
-  const text = await file.text();
-
-  // GPT-4o summary extraction
-  const summaryRes = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [{
-      role: 'user',
-      content: `Прочитай следующий документ о семье и напиши плотное резюме (максимум 300 слов) всех ключевых фактов: имена, даты, места, события, семейные связи. Это резюме будет использовано как контекст для интервьюера.\n\n${text.substring(0, 8000)}`,
-    }],
-  });
-
-  const summaryText = summaryRes.choices[0].message.content ?? '';
+  // Summarize plain-text files only; binary formats (PDF, DOCX) not yet parseable
+  let summaryText: string | null = null;
+  if (file.type === 'text/plain') {
+    try {
+      const text = await file.text();
+      const summaryRes = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: `Прочитай следующий документ о семье и напиши плотное резюме (максимум 300 слов) всех ключевых фактов: имена, даты, места, события, семейные связи. Это резюме будет использовано как контекст для интервьюера.\n\n${text.substring(0, 8000)}`,
+        }],
+      });
+      summaryText = summaryRes.choices[0].message.content ?? null;
+    } catch (err) {
+      console.error('Heritage summary failed:', err);
+    }
+  }
 
   const { error: insertError } = await supabaseAdmin.from('heritage_docs').insert({
     filename: file.name,
