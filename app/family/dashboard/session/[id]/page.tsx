@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { notFound } from 'next/navigation';

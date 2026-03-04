@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { HeritageUpload } from '@/components/HeritageUpload';
 import Link from 'next/link';
