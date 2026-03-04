@@ -16,12 +16,15 @@ export function HeritageUpload() {
 
     try {
       const res = await fetch('/api/heritage', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Upload failed');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`);
+      }
       setMessage('Документ загружен и обработан');
       // Brief delay so user sees the success message before reload
       setTimeout(() => window.location.reload(), 800);
-    } catch {
-      setMessage('Ошибка загрузки');
+    } catch (err) {
+      setMessage(`Ошибка: ${err instanceof Error ? err.message : 'неизвестная ошибка'}`);
     } finally {
       setUploading(false);
     }
