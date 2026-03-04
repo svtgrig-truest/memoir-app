@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const buffer = await file.arrayBuffer();
   const { error: uploadError } = await supabaseAdmin.storage
-    .from('media')
+    .from('Media')
     .upload(path, buffer, { contentType: file.type });
 
   if (uploadError) {
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   const {
     data: { publicUrl },
-  } = supabaseAdmin.storage.from('media').getPublicUrl(path);
+  } = supabaseAdmin.storage.from('Media').getPublicUrl(path);
 
   const { error: dbError } = await supabaseAdmin.from('session_media').insert({
     session_id: sessionId,

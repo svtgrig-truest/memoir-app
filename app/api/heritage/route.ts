@@ -14,14 +14,14 @@ export async function POST(req: NextRequest) {
   const storagePath = `heritage/${Date.now()}-${file.name}`;
   const buffer = await file.arrayBuffer();
   const { error: uploadError } = await supabaseAdmin.storage
-    .from('media')
+    .from('Media')
     .upload(storagePath, buffer, { contentType: file.type });
 
   if (uploadError) {
     return NextResponse.json({ error: 'Upload failed', detail: uploadError.message }, { status: 500 });
   }
 
-  const { data: { publicUrl } } = supabaseAdmin.storage.from('media').getPublicUrl(storagePath);
+  const { data: { publicUrl } } = supabaseAdmin.storage.from('Media').getPublicUrl(storagePath);
 
   // Summarize plain-text files only; binary formats (PDF, DOCX) not yet parseable
   let summaryText: string | null = null;
