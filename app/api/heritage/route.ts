@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     .upload(storagePath, buffer, { contentType: file.type });
 
   if (uploadError) {
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Upload failed', detail: uploadError.message }, { status: 500 });
   }
 
   const { data: { publicUrl } } = supabaseAdmin.storage.from('media').getPublicUrl(storagePath);
