@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Upload to Supabase Storage
-  const storagePath = `heritage/${Date.now()}-${file.name}`;
+  const safeFilename = file.name.replace(/[^\w.\-]/g, '_');
+  const storagePath = `heritage/${Date.now()}-${safeFilename}`;
   const buffer = await file.arrayBuffer();
   const { error: uploadError } = await supabaseAdmin.storage
     .from('Media')
