@@ -76,16 +76,19 @@ export default function Home() {
           if (event.type === 'response.audio.delta') setOrbState('speaking');
           if (event.type === 'response.audio.done') setOrbState('listening');
 
-          // Capture transcript turns
-          if (event.type === 'conversation.item.created') {
-            const item = event.item as Record<string, unknown>;
-            const content = (item.content as Array<Record<string, unknown>>)?.[0];
-            const text = (content?.transcript ?? content?.text ?? '') as string;
-            if (text && (item.role === 'user' || item.role === 'assistant')) {
-              messagesRef.current = [
-                ...messagesRef.current,
-                { role: item.role as string, text },
-              ];
+          // Capture user audio transcripts (arrives after speech ends)
+          if (event.type === 'conversation.item.input_audio_transcription.completed') {
+            const text = (event.transcript as string)?.trim();
+            if (text) {
+              messagesRef.current = [...messagesRef.current, { role: 'user', text }];
+            }
+          }
+
+          // Capture assistant audio transcripts
+          if (event.type === 'response.audio_transcript.done') {
+            const text = (event.transcript as string)?.trim();
+            if (text) {
+              messagesRef.current = [...messagesRef.current, { role: 'assistant', text }];
             }
           }
         }
