@@ -16,6 +16,7 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const messagesRef = useRef<TurnMessage[]>([]);
+  const isConnectingRef = useRef(false);
 
   useEffect(() => {
     supabase
@@ -29,7 +30,8 @@ export default function Home() {
   }, []);
 
   const handleOrbClick = async () => {
-    if (isSessionActive) return;
+    if (isSessionActive || isConnectingRef.current) return;
+    isConnectingRef.current = true;
     setOrbState('thinking');
 
     try {
@@ -100,6 +102,8 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to start session:', err);
       setOrbState('idle');
+    } finally {
+      isConnectingRef.current = false;
     }
   };
 
@@ -123,13 +127,22 @@ export default function Home() {
     setOrbState('idle');
     setIsSessionActive(false);
 
-    if (sessionId && messagesRef.current.length > 0) {
-      // Fire-and-forget: trigger post-session pipeline
-      fetch('/api/session-end', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
-      }).catch((err) => console.error('Session-end pipeline failed:', err));
+    if (sessionId) {
+      if (messagesRef.current.length > 0) {
+        // Fire-and-forget: trigger post-session pipeline (saves transcript + marks complete)
+        fetch('/api/session-end', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
+        }).catch((err) => console.error('Session-end pipeline failed:', err));
+      } else {
+        // No transcript captured — still mark session complete so it appears in dashboard
+        supabase
+          .from('sessions')
+          .update({ status: 'complete', ended_at: new Date().toISOString() })
+          .eq('id', sessionId)
+          .then(({ error }) => { if (error) console.error('Failed to close session:', error.message); });
+      }
     }
 
     setSessionId(null);
