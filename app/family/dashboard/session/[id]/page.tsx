@@ -17,8 +17,10 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   if (!session) notFound();
 
   const sessionData = session as Record<string, unknown>;
-  const transcripts = sessionData.transcripts as Record<string, unknown>[] | null;
-  const transcript = transcripts?.[0] ?? null;
+  // Supabase returns one-to-one (unique FK) as object, not array
+  const txRaw = sessionData.transcripts;
+  const transcript: Record<string, unknown> | null =
+    Array.isArray(txRaw) ? (txRaw[0] ?? null) : (txRaw as Record<string, unknown> | null) ?? null;
   const chapter = sessionData.chapters as Record<string, unknown> | null;
 
   return (
