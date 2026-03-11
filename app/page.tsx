@@ -72,6 +72,9 @@ export default function Home() {
         client_secret.value,
         systemPrompt,
         (event) => {
+          // Temporary debug: log all event types
+          console.log('[RT event]', event.type);
+
           // Drive orb animation from OpenAI events
           if (event.type === 'input_audio_buffer.speech_started') setOrbState('listening');
           if (event.type === 'response.created') setOrbState('thinking');
