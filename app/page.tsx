@@ -72,9 +72,6 @@ export default function Home() {
         client_secret.value,
         systemPrompt,
         (event) => {
-          // Temporary debug: log all event types
-          console.log('[RT event]', event.type);
-
           // Drive orb animation from OpenAI events
           if (event.type === 'input_audio_buffer.speech_started') setOrbState('listening');
           if (event.type === 'response.created') setOrbState('thinking');
@@ -84,7 +81,6 @@ export default function Home() {
           // Capture user audio transcripts (arrives after speech ends)
           if (event.type === 'conversation.item.input_audio_transcription.completed') {
             const text = (event.transcript as string)?.trim();
-            console.log('[transcript] user:', JSON.stringify(text));
             if (text) {
               messagesRef.current = [...messagesRef.current, { role: 'user', text }];
             }
@@ -93,7 +89,6 @@ export default function Home() {
           // Capture assistant audio transcripts
           if (event.type === 'response.audio_transcript.done') {
             const text = (event.transcript as string)?.trim();
-            console.log('[transcript] assistant:', JSON.stringify(text));
             if (text) {
               messagesRef.current = [...messagesRef.current, { role: 'assistant', text }];
             }
@@ -133,15 +128,13 @@ export default function Home() {
     setIsSessionActive(false);
 
     if (sessionId) {
-      console.log('[handleEnd] sessionId:', sessionId, 'messages:', messagesRef.current.length);
       if (messagesRef.current.length > 0) {
-        console.log('[handleEnd] calling session-end with', messagesRef.current.length, 'messages');
         // Fire-and-forget: trigger post-session pipeline (saves transcript + marks complete)
         fetch('/api/session-end', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
-        }).then(r => r.json()).then(d => console.log('[session-end response]', d)).catch((err) => console.error('Session-end pipeline failed:', err));
+        }).catch((err) => console.error('Session-end pipeline failed:', err));
       } else {
         // No transcript captured — still mark session complete so it appears in dashboard
         supabase

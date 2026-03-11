@@ -52,9 +52,11 @@ export async function connectToRealtime(
 ): Promise<RealtimeConnection> {
   const pc = new RTCPeerConnection();
 
-  // Audio output
+  // Audio output — must be in DOM for autoplay policy to work
   const audioEl = document.createElement('audio');
   audioEl.autoplay = true;
+  audioEl.style.display = 'none';
+  document.body.appendChild(audioEl);
   pc.ontrack = (e) => {
     audioEl.srcObject = e.streams[0];
   };
