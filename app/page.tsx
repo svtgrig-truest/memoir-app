@@ -81,6 +81,7 @@ export default function Home() {
           // Capture user audio transcripts (arrives after speech ends)
           if (event.type === 'conversation.item.input_audio_transcription.completed') {
             const text = (event.transcript as string)?.trim();
+            console.log('[transcript] user:', text);
             if (text) {
               messagesRef.current = [...messagesRef.current, { role: 'user', text }];
             }
@@ -89,9 +90,15 @@ export default function Home() {
           // Capture assistant audio transcripts
           if (event.type === 'response.audio_transcript.done') {
             const text = (event.transcript as string)?.trim();
+            console.log('[transcript] assistant:', text);
             if (text) {
               messagesRef.current = [...messagesRef.current, { role: 'assistant', text }];
             }
+          }
+
+          // Debug: log all event types (remove after confirming transcription works)
+          if (!['response.audio.delta', 'input_audio_buffer.appended'].includes(event.type as string)) {
+            console.log('[realtime event]', event.type);
           }
         }
       );

@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   const realtimeSession = await openai.beta.realtime.sessions.create({
     model: 'gpt-4o-realtime-preview',
     voice: 'shimmer',
+    input_audio_transcription: { model: 'whisper-1' },
   });
 
   return NextResponse.json({
