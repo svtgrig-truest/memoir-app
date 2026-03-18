@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   // No messages or user said too little — mark complete, skip transcript creation
-  const MIN_USER_WORDS = 15;
+  const MIN_USER_WORDS = 8;
   if (!messages?.length || countUserWords(messages) < MIN_USER_WORDS) {
     await supabaseAdmin
       .from('sessions')
