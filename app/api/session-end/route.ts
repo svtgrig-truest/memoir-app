@@ -16,8 +16,17 @@ export async function POST(req: NextRequest) {
   const { session_id, messages }: { session_id: string; messages: TurnMessage[] } =
     await req.json();
 
-  if (!session_id || !messages?.length) {
-    return NextResponse.json({ error: 'Missing session_id or messages' }, { status: 400 });
+  if (!session_id) {
+    return NextResponse.json({ error: 'Missing session_id' }, { status: 400 });
+  }
+
+  // No messages — just mark session complete with no transcript
+  if (!messages?.length) {
+    await supabaseAdmin
+      .from('sessions')
+      .update({ status: 'complete', ended_at: new Date().toISOString() })
+      .eq('id', session_id);
+    return NextResponse.json({ ok: true });
   }
 
   const rawText = buildRawTranscript(messages);
