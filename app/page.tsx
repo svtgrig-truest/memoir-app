@@ -41,6 +41,11 @@ export default function Home() {
         setSelectedChapterId(resolvedChapterId);
         if (autostart && !autostartFiredRef.current) {
           autostartFiredRef.current = true;
+          // Remove ?autostart=1 from the URL immediately so the browser back
+          // button doesn't re-trigger the session on return navigation.
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('autostart');
+          window.history.replaceState({}, '', cleanUrl.toString());
           // Small delay so React flushes the selectedChapterId state before we start
           setTimeout(() => startSession(resolvedChapterId), 300);
         }
