@@ -9,6 +9,7 @@ import {
   buildTagPrompt,
   buildSummaryPrompt,
   buildTitlePrompt,
+  countUserWords,
 } from '@/lib/pipeline';
 import { TurnMessage } from '@/lib/realtime';
 
@@ -20,13 +21,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing session_id' }, { status: 400 });
   }
 
-  // No messages — just mark session complete with no transcript
-  if (!messages?.length) {
+  // No messages or user said too little — mark complete, skip transcript creation
+  const MIN_USER_WORDS = 15;
+  if (!messages?.length || countUserWords(messages) < MIN_USER_WORDS) {
     await supabaseAdmin
       .from('sessions')
       .update({ status: 'complete', ended_at: new Date().toISOString() })
       .eq('id', session_id);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, skipped: true });
   }
 
   const rawText = buildRawTranscript(messages);
