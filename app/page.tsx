@@ -198,7 +198,7 @@ export default function Home() {
             Мои записи →
           </a>
           <a
-            href="/family"
+            href="/family/dashboard"
             className="text-sm transition-colors"
             style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
