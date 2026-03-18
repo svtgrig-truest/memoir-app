@@ -59,8 +59,10 @@ export async function POST(req: NextRequest) {
   const lastChapterSummary = lastChapterTx?.session_summary ?? null;
 
   // Build system prompt server-side — anon key is never used for DB access
-  const heritageSummary =
-    docsResult.data?.map((d) => d.summary_text).filter(Boolean).join('\n') ?? null;
+  // Join full texts from all docs; cap at 12 000 chars to stay within prompt limits
+  const rawHeritage =
+    docsResult.data?.map((d) => d.summary_text).filter(Boolean).join('\n\n') ?? null;
+  const heritageSummary = rawHeritage ? rawHeritage.slice(0, 12_000) : null;
   const sessionSummaries =
     transcriptsResult.data?.map((t) => t.session_summary as string).filter(Boolean) ?? [];
   const chapterTitle = (chapterResult.data as { title_ru?: string } | null)?.title_ru ?? null;
