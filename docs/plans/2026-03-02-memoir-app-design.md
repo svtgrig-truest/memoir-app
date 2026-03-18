@@ -1,9 +1,9 @@
 # Memoir App — Design Doc
-_2026-03-02_
+_Создан: 2026-03-02 · Обновлён: 2026-03-18_
 
 ## Overview
 
-A voice-first web app that interviews an 80-year-old Russian-speaking man about his life, transcribes and polishes the sessions into a memoir, and makes the result accessible to family.
+Голосовое веб-приложение, которое записывает воспоминания пожилого русскоязычного человека в форме интервью с AI, транскрибирует и редактирует беседы в мемуарный текст, и предоставляет семье доступ к архиву.
 
 ---
 
@@ -11,68 +11,114 @@ A voice-first web app that interviews an 80-year-old Russian-speaking man about 
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js (React) |
-| Hosting | Vercel (one deployment, one URL) |
+| Frontend | Next.js 16 (App Router, React 19) |
+| Hosting | Vercel |
 | Database + Auth + Storage | Supabase |
-| Voice AI | OpenAI Realtime API (`gpt-4o-realtime-preview`) |
+| Voice AI | OpenAI Realtime API (`gpt-4o-realtime-preview`, WebRTC) |
 | Post-processing AI | GPT-4o (polish, tagging, summarization) |
-| Language | Russian throughout |
+| Styling | Tailwind CSS v4, Framer Motion |
+| PDF export | jsPDF |
+| Language | Русский по умолчанию |
 
 ---
 
 ## Users & Access
 
-| User | Access method |
+| User | Access |
 |---|---|
-| Dad | Bookmarked direct link — no login, straight to voice interface |
-| Family (admin + readers) | `/family` route — single shared password |
+| Dad | Закладка на главную — без логина, сразу голосовой интерфейс |
+| Семья | `/family` — один общий пароль (`FAMILY_PASSWORD`) |
+
+---
+
+## Design System
+
+Тёплая, ностальгическая палитра. Приложение о драгоценных воспоминаниях — дизайн должен это отражать.
+
+| Токен | Значение | Применение |
+|---|---|---|
+| `--bg` | `#0d0b09` | Фон страниц |
+| `--bg-card` | `#1c1914` | Карточки, панели |
+| `--accent` | `#d4a853` | Акцент, активные элементы |
+| `--accent-dim` | `rgba(212,168,83,0.12)` | Фон активных чипов |
+| `--text` | `#f0ece4` | Основной текст |
+| `--text-muted` | `#7a6f62` | Вторичный текст, подписи |
+| `--border` | `#2a2118` | Разделители, рамки |
+
+Шрифт: Geist (подключён через `next/font`).
 
 ---
 
 ## Dad's Interface
 
-Modeled after Gemini / ChatGPT voice mode. Voice-first, zero cognitive load.
+Голос — единственное главное действие. Интерфейс не должен отвлекать.
 
-### Main screen
+### Главный экран
 
-- Animated orb (pulsing = AI speaking, rippling = dad speaking, slow glow = idle)
-- Tap orb to start / stop speaking
-- **Pause** button — saves session, resumes later
-- **End** button — closes session, triggers post-processing
-- Text input bar (always visible at bottom) with:
-  - 📎 Attach photos from gallery or files
-  - 🎤 Toggle mic
-- ☰ hamburger — opens chapter sidebar
+**Хедер:**
+- Название «Memoir» (янтарный)
+- Ссылка «Семейный архив →» справа
 
-### Chapter sidebar (hidden by default)
+**Выбор темы (всегда виден):**
+- Горизонтальный ряд чипов-пилюль: «Свободный разговор» + все главы
+- Активный чип выделен янтарём
+- Выбор заблокирован во время активной сессии
+- _(Ранее был hamburger-menu → скрытый sidebar. Убрано как неочевидное)_
 
-- List of all chapters with ✓ if they have sessions
-- `+ Новая тема` — dad can suggest his own topic
-- Tapping a chapter sets the AI's focus for the current session
+**Орб:**
+- Янтарный градиент `#e8c06a → #c9893a → #8b4e1a` с мягким свечением
+- Состояния: idle / listening / speaking / thinking — разные анимации
+- Подпись под орбом: «Нажмите, чтобы начать» / «Слушаю вас...» / «Думаю...» / «Отвечаю...»
+- Нажатие запускает голосовую сессию
+
+**Управление сессией (появляется только во время активной сессии):**
+- 📷 **Фото** — прикрепить фото или файл к текущей сессии
+- ⏸ **Пауза** — сохранить, продолжить позже
+- ✕ **Завершить** — закрыть сессию, запустить постобработку
+- _(Ранее была постоянная TextInputBar с текстовым полем + иконками. Убрано — конкурировала с орбом. Фото перемещены в контекст сессии)_
 
 ---
 
 ## Family Interface (`/family`)
 
-- Chapter + session browser
-- Per-session view:
-  - Raw transcript (verbatim) and polished memoir prose — side by side
-  - Inline comments (anchored to text)
-- Export options:
-  - Per session: raw transcript (`.txt`), polished prose (`.txt`)
-  - Per chapter: polished chapter as PDF
-  - Full book: all chapters as PDF
-- Heritage doc upload section — PDFs, Word docs, scanned notes
+### Страница входа
+
+- Логотип «Memoir», подзаголовок «Семейный архив»
+- Форма с паролем
+- Ссылка «← Вернуться к записи»
+
+### Дашборд (`/family/dashboard`)
+
+- Счётчик всех записей в хедере
+- Секции по главам — только те, где есть завершённые записи
+- Каждая секция: название главы + количество записей
+- Записи: дата → ссылка на страницу сессии
+- Секция «Свободные разговоры» для записей без темы
+- Пустое состояние: кнопка «Начать первый разговор» → главная
+- Ссылка на раздел документов
+
+### Страница сессии (`/family/dashboard/session/[id]`)
+
+- Хлебные крошки: «← Назад к архиву»
+- Заголовок: тема + дата
+- Кнопки экспорта:
+  - **Скачать PDF** (акцентный стиль) — полная история
+  - **История .txt** — литературная версия
+  - **Разговор .txt** — оригинальный транскрипт
+- `TranscriptViewer`: по умолчанию вкладка «История» (литературная версия)
+  - Переключение: История / Разговор / Оба
+
+### Документы (`/family/dashboard/heritage`)
+
+- Загрузка семейных документов (PDF, Word, фото, txt)
+- Список загруженных документов с превью summary
+- Статус: «Готов» (✓ янтарь) / «Обработка» (🕐 серый)
 
 ---
 
 ## Data Model
 
 ```sql
-users
-  id, email, role (admin | family)
-  -- dad has no account
-
 chapters
   id, title_ru, display_order
   theme (childhood | youth | career | family | travel | events | free | custom)
@@ -81,11 +127,6 @@ sessions
   id, chapter_id (nullable — auto-tagged post-session)
   started_at, ended_at
   status (active | paused | complete)
-
-messages
-  id, session_id, role (user | assistant)
-  content_type (text | audio_transcript | image | file)
-  content_text, file_url, created_at
 
 session_media
   id, session_id, file_url, mime_type, ai_caption
@@ -98,7 +139,8 @@ transcripts
   polished_at
 
 comments
-  id, transcript_id, user_id, anchor_text, body, created_at
+  id, transcript_id, anchor_text, body, created_at
+  -- schema ready, UI not yet built
 
 heritage_docs
   id, filename, file_url, mime_type
@@ -113,12 +155,12 @@ heritage_docs
 ### Realtime API (voice session)
 
 **Ephemeral token flow:**
-1. Dad taps orb → browser calls `/api/session-token`
-2. Server generates short-lived token using OpenAI API key (key never leaves server)
-3. Browser opens WebSocket directly to OpenAI Realtime API using token
-4. Conversation runs fully in-browser; transcript streamed to Supabase
+1. Dad нажимает орб → браузер вызывает `/api/session-token`
+2. Сервер генерирует короткоживущий токен (ключ OpenAI не покидает сервер)
+3. Браузер открывает WebRTC соединение напрямую с OpenAI Realtime API
+4. Разговор полностью в браузере; транскрипт сохраняется в Supabase
 
-**System prompt structure:**
+**System prompt:**
 
 ```
 Ты тёплый, любопытный, эмпатичный интервьюер, помогающий [имя]
@@ -131,52 +173,62 @@ heritage_docs
 [session_summary values from recent sessions]
 
 Цель текущей беседы:
-[if chapter selected: исследуй тему — [theme]; else: следуй за тем, что хочет рассказать собеседник]
+[если выбрана глава: исследуй тему — [theme]; иначе: следуй за рассказчиком]
 
 Правила:
 - Задавай только один вопрос за раз
 - Активное слушание: отражай сказанное перед следующим вопросом
 - Если тишина >8 секунд, мягко спроси: "Расскажи подробнее..."
-- Если упоминается имя/место/дата из документов о семье — копай глубже
+- Если упоминается имя/место/дата из семейных документов — углубляйся
 - Никогда не торопи, не поправляй
 - После ~40 минут мягко предложи завершить беседу
 ```
 
-### Post-session pipeline (triggered on End or Pause)
+### Post-session pipeline (triggered on End)
 
-Runs as a background job after session ends:
-
-1. **Save raw transcript** — verbatim turn-by-turn from Realtime API → `transcripts.raw_text`
-2. **Chapter auto-tag** — GPT-4o reads transcript, assigns `chapter_id`
-3. **Polish** — GPT-4o rewrites transcript as memoir prose → `transcripts.polished_text`
-4. **Summarize** — GPT-4o generates compact session summary → `transcripts.session_summary` (injected into future system prompts)
+1. **Сохранить raw transcript** → `transcripts.raw_text`
+2. **Авто-тег главы** — GPT-4o присваивает `chapter_id` если не выбрана
+3. **Литературная обработка** — GPT-4o → `transcripts.polished_text`
+4. **Краткое резюме** — GPT-4o → `transcripts.session_summary` (вставляется в будущие промпты)
 
 ### Heritage docs pipeline (on upload)
 
-- One-time GPT-4o call extracts dense summary from doc
-- Stored in `heritage_docs.summary_text`
-- Injected into every future session's system prompt
+- Однократный GPT-4o вызов извлекает плотное резюме
+- Хранится в `heritage_docs.summary_text`
+- Вставляется в system prompt каждой сессии
 
 ---
 
 ## Build Phases
 
-| Phase | Deliverable |
-|---|---|
-| 1 | Scaffold: Next.js on Vercel, Supabase schema, orb UI (no AI) |
-| 2 | Voice works: ephemeral tokens, Realtime API connected, session saved |
-| 3 | AI interviewer: system prompt, silence detection, Russian persona |
-| 4 | Post-session pipeline: tagging, polish, summarization |
-| 5 | Text + media input: text bar, photo/file attach, AI acknowledgement |
-| 6 | Family view: auth, transcript viewer, comments, raw + polished export |
-| 7 | Heritage docs + PDF export: upload → summary extraction, full book PDF |
-
-App is usable for dad at end of Phase 3. Family access at end of Phase 6.
+| Phase | Deliverable | Статус |
+|---|---|---|
+| 1 | Scaffold: Next.js, Supabase schema, orb UI | ✅ Готово |
+| 2 | Voice: ephemeral tokens, Realtime API, session saved | ✅ Готово |
+| 3 | AI interviewer: system prompt, Russian persona | ✅ Готово |
+| 4 | Post-session pipeline: tagging, polish, summarization | ✅ Готово |
+| 5 | Media input: photo/file attach, AI acknowledgement | ✅ Готово |
+| 6 | Family view: auth, transcript viewer, export (txt + PDF) | ✅ Готово |
+| 7 | Heritage docs: upload → GPT-4o summary → injected into prompt | ✅ Готово |
+| 8 | **UX redesign**: warm palette, visible chapters, orb labels, photo button | ✅ Готово (2026-03-18) |
+| 9 | Full-book PDF: all chapters as one PDF | 🔲 Backlog |
+| 10 | Comments: family annotates transcript inline | 🔲 Backlog |
+| 11 | Push notifications: family notified on new session | 🔲 Backlog |
+| 12 | Progress hints: voice cue when topics haven't been covered | 🔲 Backlog |
 
 ---
 
-## Open Questions / Future
+## Open Questions / Backlog
 
-- Photo handling in final PDF (layout TBD)
-- Push notifications to family when new session is complete
-- Dad-facing voice to hint which topics haven't been covered yet
+### Нерешённые вопросы
+- **Кириллица в PDF**: jsPDF использует Helvetica (Latin only). Для корректного русского текста нужен либо кириллический шрифт в jsPDF, либо переход на Puppeteer.
+- **Фото в PDF**: как встраивать прикреплённые фото в финальный PDF (расположение, подписи).
+- **«Новая тема»**: кнопка на главной пока не работает (UI есть, логика не реализована).
+- **Возобновление паузы**: сессия сохраняется со статусом `paused`, но UI для продолжения не реализован.
+
+### Backlog фичи
+- Full-book PDF — экспорт всей книги целиком
+- Комментарии семьи — привязанные к фрагментам текста (схема БД готова)
+- Push-уведомления семье при новой записи
+- Голосовая подсказка папе: какие темы ещё не охвачены
+- Страница прогресса: сколько глав записано, сколько осталось
