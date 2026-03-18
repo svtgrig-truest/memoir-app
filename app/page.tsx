@@ -239,7 +239,7 @@ export default function Home() {
         <section className="pt-6 pb-4">
           <p
             className="text-sm uppercase tracking-widest mb-4"
-            style={{ color: 'var(--text-muted)' }}
+            style={{ color: 'var(--text)' }}
           >
             Тема разговора
           </p>
@@ -270,7 +270,7 @@ export default function Home() {
           {/* State label */}
           <p
             className="text-lg tracking-wide transition-all duration-300"
-            style={{ color: isSessionActive ? 'var(--accent)' : 'var(--text-muted)' }}
+            style={{ color: isSessionActive ? 'var(--accent)' : 'var(--text)' }}
           >
             {isSessionActive ? orbLabels[orbState] : orbLabels['idle']}
           </p>
@@ -359,9 +359,9 @@ function ChapterChip({
   href?: string;
 }) {
   const style = {
-    background: selected ? 'var(--accent-dim)' : 'rgba(255,255,255,0.04)',
-    color: selected ? 'var(--accent)' : 'var(--text-muted)',
-    border: `1px solid ${selected ? 'var(--accent-border)' : 'var(--border)'}`,
+    background: selected ? 'var(--accent-dim)' : 'rgba(255,255,255,0.09)',
+    color: selected ? 'var(--accent)' : 'var(--text)',
+    border: `1px solid ${selected ? 'var(--accent-border)' : 'rgba(255,255,255,0.18)'}`,
   };
   const className = 'flex-shrink-0 px-5 py-3 rounded-full text-base transition-all duration-200';
 
