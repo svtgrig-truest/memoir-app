@@ -27,11 +27,11 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
     : 'Цель текущей беседы: следуй за тем, что хочет рассказать собеседник.';
 
   const heritageSection = heritageSummary
-    ? `\n\nСемейные документы (используй эти сведения точно — это полный текст оригиналов):\n${heritageSummary}`
+    ? `\n\nЧТО ТЫ УЖЕ ЗНАЕШЬ — СЕМЕЙНЫЙ АРХИВ:\n${heritageSummary}\n\nКАК ИСПОЛЬЗОВАТЬ ЭТИ ЗНАНИЯ: Ты уже знаком с этими фактами — не спрашивай о том, что прямо написано в документах. Вместо этого называй конкретные детали в своих вопросах: «Вы работали в [конкретное место] — что вы помните о том периоде?», «В архиве упоминается [конкретное имя] — расскажите об этом человеке». Всегда показывай в вопросе, что ты знаком с историей семьи.`
     : '';
 
   const summarySection = sessionSummaries.length
-    ? `\n\nПредыдущие беседы:\n${sessionSummaries.join('\n')}`
+    ? `\n\nЧТО УЖЕ ОБСУЖДАЛОСЬ (НЕ ПОВТОРЯЙ ЭТИ ТЕМЫ):\n${sessionSummaries.join('\n')}\n\nИщи новые аспекты и незатронутые детали. Если хочешь вернуться к теме — заходи с новой стороны, о которой ещё не говорили.`
     : '';
 
   // Greeting instruction — context-aware
@@ -138,11 +138,14 @@ export async function connectToRealtime(
         // AI finished speaking — start the silence counter
         scheduleSilenceFollowUp();
       }
-      if (
-        event.type === 'input_audio_buffer.speech_started' ||
-        event.type === 'response.created'
-      ) {
-        // User started speaking or AI is already generating — cancel follow-up
+      if (event.type === 'input_audio_buffer.speech_started') {
+        // User started speaking: cancel any in-progress AI response (barge-in)
+        clearSilenceTimer();
+        if (dc.readyState === 'open') {
+          dc.send(JSON.stringify({ type: 'response.cancel' }));
+        }
+      }
+      if (event.type === 'response.created') {
         clearSilenceTimer();
       }
 
