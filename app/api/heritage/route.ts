@@ -2,6 +2,61 @@ import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
+const SUMMARY_PROMPT =
+  'Прочитай этот документ о семье и напиши плотное резюме (максимум 300 слов) всех ключевых фактов: имена, даты, места, события, семейные связи. Это резюме будет использовано как контекст для интервьюера. Только факты — никаких предположений.';
+
+async function summariseBuffer(
+  buffer: ArrayBuffer,
+  filename: string,
+  mimeType: string
+): Promise<string | null> {
+  try {
+    if (mimeType === 'text/plain') {
+      const text = Buffer.from(buffer).toString('utf-8');
+      const res = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: `${SUMMARY_PROMPT}\n\n${text.substring(0, 8000)}` }],
+      });
+      return res.choices[0].message.content ?? null;
+    }
+
+    if (mimeType === 'application/pdf') {
+      const base64 = Buffer.from(buffer).toString('base64');
+      const res = await (openai as any).responses.create({
+        model: 'gpt-4o',
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'input_file', filename, file_data: `data:application/pdf;base64,${base64}` },
+              { type: 'input_text', text: SUMMARY_PROMPT },
+            ],
+          },
+        ],
+      });
+      return (res as any).output_text ?? null;
+    }
+
+    if (
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mimeType === 'application/msword'
+    ) {
+      const mammoth = await import('mammoth');
+      const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
+      const text = result.value;
+      if (!text.trim()) return null;
+      const res = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: `${SUMMARY_PROMPT}\n\n${text.substring(0, 8000)}` }],
+      });
+      return res.choices[0].message.content ?? null;
+    }
+  } catch (err) {
+    console.error('Heritage summarise failed:', err);
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get('file') as File | null;
@@ -10,10 +65,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   }
 
-  // Upload to Supabase Storage
+  const buffer = await file.arrayBuffer();
+
   const safeFilename = file.name.replace(/[^\w.\-]/g, '_');
   const storagePath = `heritage/${Date.now()}-${safeFilename}`;
-  const buffer = await file.arrayBuffer();
+
   const { error: uploadError } = await supabaseAdmin.storage
     .from('Media')
     .upload(storagePath, buffer, { contentType: file.type });
@@ -24,23 +80,7 @@ export async function POST(req: NextRequest) {
 
   const { data: { publicUrl } } = supabaseAdmin.storage.from('Media').getPublicUrl(storagePath);
 
-  // Summarize plain-text files only; binary formats (PDF, DOCX) not yet parseable
-  let summaryText: string | null = null;
-  if (file.type === 'text/plain') {
-    try {
-      const text = await file.text();
-      const summaryRes = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{
-          role: 'user',
-          content: `Прочитай следующий документ о семье и напиши плотное резюме (максимум 300 слов) всех ключевых фактов: имена, даты, места, события, семейные связи. Это резюме будет использовано как контекст для интервьюера.\n\n${text.substring(0, 8000)}`,
-        }],
-      });
-      summaryText = summaryRes.choices[0].message.content ?? null;
-    } catch (err) {
-      console.error('Heritage summary failed:', err);
-    }
-  }
+  const summaryText = await summariseBuffer(buffer, file.name, file.type);
 
   const { error: insertError } = await supabaseAdmin.from('heritage_docs').insert({
     filename: file.name,
