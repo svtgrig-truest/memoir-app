@@ -59,7 +59,7 @@ async function extractText(buffer: ArrayBuffer, filename: string, mimeType: stri
       const text = data.output?.[0]?.content?.[0]?.text ?? data.output_text ?? null;
       return text ? text.slice(0, MAX_CHARS) : null;
     } finally {
-      if (fileId) openai.files.del(fileId).catch(() => {});
+      if (fileId) openai.files.delete(fileId).catch(() => {});
     }
   } catch (err) {
     console.error('Heritage extract failed:', err);
