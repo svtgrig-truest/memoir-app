@@ -84,7 +84,7 @@ export default async function ChapterArchivePage({ params }: { params: Promise<{
 
           {/* Start new recording button */}
           <a
-            href={`/?chapter=${chapter.id}`}
+            href={`/?chapter=${chapter.id}&autostart=1`}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex-shrink-0"
             style={{
               background: 'var(--accent-dim)',
@@ -150,7 +150,7 @@ export default async function ChapterArchivePage({ params }: { params: Promise<{
             Разговоров об этом ещё не было
           </p>
           <a
-            href={`/?chapter=${chapter.id}`}
+            href={`/?chapter=${chapter.id}&autostart=1`}
             className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-xl transition-all"
             style={{
               background: 'var(--accent-dim)',
