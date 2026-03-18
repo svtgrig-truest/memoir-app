@@ -105,14 +105,14 @@ export default async function ChapterArchivePage({ params }: { params: Promise<{
             <Link
               key={session.id}
               href={`/archive/session/${session.id}`}
-              className="flex items-center justify-between px-5 py-4 rounded-2xl transition-colors group"
+              className="flex items-center justify-between px-6 py-5 rounded-2xl transition-colors group"
               style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
             >
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  {index === 0 && (
+                {index === 0 && (
+                  <div className="mb-2">
                     <span
-                      className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full flex-shrink-0"
+                      className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full"
                       style={{
                         background: 'var(--accent-dim)',
                         color: 'var(--accent)',
@@ -121,17 +121,17 @@ export default async function ChapterArchivePage({ params }: { params: Promise<{
                     >
                       Последний разговор
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
                 {getShortTitle(session) && (
                   <p
-                    className="text-sm font-medium mb-0.5 group-hover:text-[var(--accent)] transition-colors truncate"
+                    className="text-base font-medium mb-1 group-hover:text-[var(--accent)] transition-colors truncate"
                     style={{ color: 'var(--text)' }}
                   >
                     {getShortTitle(session)}
                   </p>
                 )}
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                   {formatDateTime(session.started_at)}
                 </p>
               </div>
