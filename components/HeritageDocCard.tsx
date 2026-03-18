@@ -55,7 +55,7 @@ export function HeritageDocCard({ doc: initialDoc }: { doc: Doc }) {
           </a>
           {doc.summary_text && (
             <p
-              className="text-xs mt-2 leading-relaxed"
+              className="text-xs mt-2 leading-relaxed line-clamp-3"
               style={{ color: 'var(--text-muted)' }}
             >
               {doc.summary_text}
@@ -68,38 +68,34 @@ export function HeritageDocCard({ doc: initialDoc }: { doc: Doc }) {
           )}
         </div>
 
-        <div className="flex-shrink-0 flex items-center gap-1.5">
-          {doc.summary_text ? (
-            <>
-              <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
-              <span className="text-xs" style={{ color: 'var(--accent)' }}>
-                Готов
-              </span>
-            </>
-          ) : (
-            <button
-              onClick={reprocess}
-              disabled={processing}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-              style={{
-                color: 'var(--text)',
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid var(--border)',
-              }}
-            >
-              {processing ? (
-                <>
-                  <Clock className="w-3.5 h-3.5" />
-                  Обработка...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Обработать
-                </>
-              )}
-            </button>
+        <div className="flex-shrink-0 flex items-center gap-2">
+          {doc.summary_text && !processing && (
+            <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
           )}
+
+          <button
+            onClick={reprocess}
+            disabled={processing}
+            title="Переизвлечь полный текст"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+            style={{
+              color: processing ? 'var(--text-muted)' : 'var(--text)',
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {processing ? (
+              <>
+                <Clock className="w-3.5 h-3.5 animate-spin" />
+                Обработка…
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3.5 h-3.5" />
+                {doc.summary_text ? 'Обновить' : 'Обработать'}
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>
