@@ -7,9 +7,9 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 const MAX_CHARS = 30_000;
 
 const EXTRACT_PROMPT =
-  'Извлеки полный текст этого документа дословно — точь-в-точь как в оригинале. ' +
-  'Сохрани все имена, даты, места, события, семейные связи и любые детали. ' +
-  'Ничего не сокращай, не перефразируй и не опускай. Выведи только текст документа.';
+  'Подробно перескажи всё содержимое этого документа — все имена, даты, места, ' +
+  'события, семейные связи и факты. Будь максимально полным, ничего не пропускай. ' +
+  'Структурируй ответ по разделам документа.';
 
 async function extractText(buffer: ArrayBuffer, filename: string, mimeType: string): Promise<string | null> {
   try {
@@ -34,7 +34,7 @@ async function extractText(buffer: ArrayBuffer, filename: string, mimeType: stri
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           input: [
             {
               role: 'user',
