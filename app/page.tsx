@@ -27,16 +27,20 @@ export default function Home() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    const urlChapterId = new URLSearchParams(window.location.search).get('chapter');
     fetch('/api/chapters')
       .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setChapters(data); })
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (data?.chapters ?? []);
+        if (Array.isArray(list)) setChapters(list);
+        // Pre-select: URL param takes priority, then last used chapter
+        if (urlChapterId) {
+          setSelectedChapterId(urlChapterId);
+        } else if (data?.lastChapterId) {
+          setSelectedChapterId(data.lastChapterId);
+        }
+      })
       .catch((err) => console.error('Failed to load chapters:', err));
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const chapterId = params.get('chapter');
-    if (chapterId) setSelectedChapterId(chapterId);
   }, []);
 
   const showToast = (msg: string) => {
