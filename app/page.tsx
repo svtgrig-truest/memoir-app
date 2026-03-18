@@ -27,20 +27,24 @@ export default function Home() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const urlChapterId = new URLSearchParams(window.location.search).get('chapter');
+    const params = new URLSearchParams(window.location.search);
+    const urlChapterId = params.get('chapter');
+    const autostart = params.get('autostart') === '1';
     fetch('/api/chapters')
       .then((r) => r.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : (data?.chapters ?? []);
         if (Array.isArray(list)) setChapters(list);
         // Pre-select: URL param takes priority, then last used chapter
-        if (urlChapterId) {
-          setSelectedChapterId(urlChapterId);
-        } else if (data?.lastChapterId) {
-          setSelectedChapterId(data.lastChapterId);
+        const resolvedChapterId = urlChapterId ?? data?.lastChapterId ?? null;
+        setSelectedChapterId(resolvedChapterId);
+        if (autostart) {
+          // Small delay so React flushes the selectedChapterId state before we start
+          setTimeout(() => startSession(resolvedChapterId), 300);
         }
       })
       .catch((err) => console.error('Failed to load chapters:', err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const showToast = (msg: string) => {
@@ -49,7 +53,7 @@ export default function Home() {
     toastTimerRef.current = setTimeout(() => setPhotoToast(null), 3000);
   };
 
-  const handleOrbClick = async () => {
+  const startSession = async (chapterId: string | null) => {
     if (isSessionActive || isConnectingRef.current) return;
     isConnectingRef.current = true;
     setOrbState('thinking');
@@ -59,7 +63,7 @@ export default function Home() {
       const tokenRes = await fetch('/api/session-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chapter_id: selectedChapterId }),
+        body: JSON.stringify({ chapter_id: chapterId }),
       });
 
       if (!tokenRes.ok) throw new Error('Failed to get session token');
@@ -102,6 +106,8 @@ export default function Home() {
       isConnectingRef.current = false;
     }
   };
+
+  const handleOrbClick = () => startSession(selectedChapterId);
 
   const handlePause = async () => {
     connectionRef.current?.disconnect();
