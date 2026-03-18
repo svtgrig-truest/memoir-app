@@ -4,7 +4,7 @@ import { VoiceOrb } from '@/components/VoiceOrb';
 import { supabase } from '@/lib/supabase/client';
 import { connectToRealtime, buildSystemPrompt, RealtimeConnection, TurnMessage } from '@/lib/realtime';
 import { Chapter, OrbState } from '@/types';
-import { Pause, X, ImagePlus } from 'lucide-react';
+import { Pause, X, ImagePlus, CheckCircle2 } from 'lucide-react';
 
 const orbLabels: Record<OrbState, string> = {
   idle: 'Нажмите, чтобы начать',
@@ -19,10 +19,13 @@ export default function Home() {
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [photoCount, setPhotoCount] = useState(0);
+  const [photoToast, setPhotoToast] = useState<string | null>(null);
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const messagesRef = useRef<TurnMessage[]>([]);
   const isConnectingRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     supabase
@@ -35,10 +38,17 @@ export default function Home() {
       });
   }, []);
 
+  const showToast = (msg: string) => {
+    setPhotoToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setPhotoToast(null), 3000);
+  };
+
   const handleOrbClick = async () => {
     if (isSessionActive || isConnectingRef.current) return;
     isConnectingRef.current = true;
     setOrbState('thinking');
+    setPhotoCount(0);
 
     try {
       const [{ data: docs }, { data: transcripts }] = await Promise.all([
@@ -142,11 +152,13 @@ export default function Home() {
 
     setSessionId(null);
     messagesRef.current = [];
+    setPhotoCount(0);
   };
 
   const handleAttach = async (files: FileList) => {
     if (!sessionId) return;
 
+    let uploaded = 0;
     for (const file of Array.from(files)) {
       const formData = new FormData();
       formData.append('file', file);
@@ -157,6 +169,8 @@ export default function Home() {
         console.error('Upload failed for', file.name);
         continue;
       }
+
+      uploaded++;
 
       if (connectionRef.current?.dc?.readyState === 'open') {
         const caption = `Пользователь прикрепил файл: ${file.name}`;
@@ -174,6 +188,14 @@ export default function Home() {
         messagesRef.current = [...messagesRef.current, { role: 'user', text: caption }];
       }
     }
+
+    if (uploaded > 0) {
+      const newCount = photoCount + uploaded;
+      setPhotoCount(newCount);
+      showToast(uploaded === 1 ? 'Фото прикреплено к разговору' : `Прикреплено ${uploaded} файла`);
+    }
+
+    if (fileRef.current) fileRef.current.value = '';
   };
 
   const selectedChapterTitle = chapters.find((c) => c.id === selectedChapterId)?.title_ru;
@@ -190,10 +212,7 @@ export default function Home() {
 
       {/* Header */}
       <header className="relative flex items-center justify-between px-6 pt-8 pb-2">
-        <span
-          className="text-xl font-semibold tracking-wide"
-          style={{ color: 'var(--accent)' }}
-        >
+        <span className="text-xl font-semibold tracking-wide" style={{ color: 'var(--accent)' }}>
           Memoir
         </span>
         <a
@@ -209,10 +228,7 @@ export default function Home() {
 
       {/* Chapter selector */}
       <section className="relative px-6 pt-5 pb-2">
-        <p
-          className="text-xs uppercase tracking-widest mb-3"
-          style={{ color: 'var(--text-muted)' }}
-        >
+        <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
           Тема разговора
         </p>
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -258,7 +274,19 @@ export default function Home() {
               onChange={(e) => e.target.files && handleAttach(e.target.files)}
             />
             <SessionButton
-              icon={<ImagePlus className="w-5 h-5" />}
+              icon={
+                <div className="relative">
+                  <ImagePlus className="w-5 h-5" />
+                  {photoCount > 0 && (
+                    <span
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
+                      style={{ background: 'var(--accent)', color: '#0d0b09' }}
+                    >
+                      {photoCount}
+                    </span>
+                  )}
+                </div>
+              }
               label="Фото"
               onClick={() => fileRef.current?.click()}
             />
@@ -276,13 +304,28 @@ export default function Home() {
           </div>
         )}
 
-        {/* Selected chapter label during session */}
+        {/* Chapter label during session */}
         {isSessionActive && selectedChapterTitle && (
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             Тема: {selectedChapterTitle}
           </p>
         )}
       </div>
+
+      {/* Photo upload toast */}
+      {photoToast && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm shadow-lg"
+          style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--accent-border)',
+            color: 'var(--accent)',
+          }}
+        >
+          <CheckCircle2 className="w-4 h-4" />
+          {photoToast}
+        </div>
+      )}
     </main>
   );
 }
@@ -328,7 +371,7 @@ function SessionButton({
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-1.5 transition-opacity hover:opacity-100"
+      className="flex flex-col items-center gap-1.5"
       style={{ opacity: 0.65 }}
       onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
       onMouseLeave={e => (e.currentTarget.style.opacity = '0.65')}
