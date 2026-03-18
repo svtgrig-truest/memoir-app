@@ -188,135 +188,143 @@ export default function Home() {
       <div
         className="pointer-events-none fixed inset-0"
         style={{
-          background: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(212,168,83,0.06) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(212,168,83,0.07) 0%, transparent 70%)',
         }}
       />
 
-      {/* Header */}
-      <header className="relative flex items-center justify-between px-6 pt-8 pb-2">
-        <span className="text-xl font-semibold tracking-wide" style={{ color: 'var(--accent)' }}>
-          Memoir
-        </span>
-        <div className="flex items-center gap-4">
-          <a
-            href="/archive"
-            className="text-sm transition-colors"
-            style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-          >
-            Мои записи →
-          </a>
-          <a
-            href="/family/dashboard"
-            className="text-sm transition-colors"
-            style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-          >
-            Семейный архив →
-          </a>
-        </div>
-      </header>
+      {/* Centred content column */}
+      <div className="relative flex flex-col min-h-screen w-full max-w-3xl mx-auto px-6 md:px-10">
 
-      {/* Chapter selector */}
-      <section className="relative px-6 pt-5 pb-2">
-        <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
-          Тема разговора
-        </p>
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          <ChapterChip
-            label="Свободный разговор"
-            selected={selectedChapterId === null}
-            disabled={isSessionActive}
-            onClick={() => setSelectedChapterId(null)}
-          />
-          {chapters.map((ch) => (
-            <ChapterChip
-              key={ch.id}
-              label={ch.title_ru}
-              selected={selectedChapterId === ch.id}
-              disabled={isSessionActive}
-              onClick={() => setSelectedChapterId(ch.id)}
-              href={isSessionActive ? undefined : `/archive/chapter/${ch.id}`}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* Orb area */}
-      <div className="relative flex-1 flex flex-col items-center justify-center gap-6 py-10">
-        <VoiceOrb state={orbState} onClick={handleOrbClick} disabled={isSessionActive} />
-
-        {/* State label */}
-        <p
-          className="text-sm tracking-wide transition-all duration-300"
-          style={{ color: isSessionActive ? 'var(--accent)' : 'var(--text-muted)' }}
-        >
-          {isSessionActive ? orbLabels[orbState] : orbLabels['idle']}
-        </p>
-
-        {/* Session controls */}
-        {isSessionActive && (
-          <div className="flex items-center gap-5 mt-2">
-            <input
-              type="file"
-              ref={fileRef}
-              className="hidden"
-              multiple
-              accept="image/*,.pdf,.doc,.docx,.txt"
-              onChange={(e) => e.target.files && handleAttach(e.target.files)}
-            />
-            <SessionButton
-              icon={
-                <div className="relative">
-                  <ImagePlus className="w-5 h-5" />
-                  {photoCount > 0 && (
-                    <span
-                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
-                      style={{ background: 'var(--accent)', color: '#0d0b09' }}
-                    >
-                      {photoCount}
-                    </span>
-                  )}
-                </div>
-              }
-              label="Фото"
-              onClick={() => fileRef.current?.click()}
-            />
-            <SessionButton
-              icon={<Pause className="w-5 h-5" />}
-              label="Пауза"
-              onClick={handlePause}
-            />
-            <SessionButton
-              icon={<X className="w-5 h-5" />}
-              label="Завершить"
-              onClick={handleEnd}
-              danger
-            />
+        {/* Header */}
+        <header className="flex items-center justify-between pt-8 pb-4">
+          <span className="text-2xl font-semibold tracking-wide" style={{ color: 'var(--accent)' }}>
+            Memoir
+          </span>
+          <div className="flex items-center gap-6">
+            <a
+              href="/archive"
+              className="text-base transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+            >
+              Мои записи →
+            </a>
+            <a
+              href="/family/dashboard"
+              className="text-base transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+            >
+              Семейный архив →
+            </a>
           </div>
-        )}
+        </header>
 
-        {/* Chapter label during session */}
-        {isSessionActive && selectedChapterTitle && (
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            Тема: {selectedChapterTitle}
+        {/* Chapter selector */}
+        <section className="pt-6 pb-4">
+          <p
+            className="text-sm uppercase tracking-widest mb-4"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            Тема разговора
           </p>
-        )}
+          <div className="flex flex-wrap gap-3">
+            <ChapterChip
+              label="Свободный разговор"
+              selected={selectedChapterId === null}
+              disabled={isSessionActive}
+              onClick={() => setSelectedChapterId(null)}
+            />
+            {chapters.map((ch) => (
+              <ChapterChip
+                key={ch.id}
+                label={ch.title_ru}
+                selected={selectedChapterId === ch.id}
+                disabled={isSessionActive}
+                onClick={() => setSelectedChapterId(ch.id)}
+                href={isSessionActive ? undefined : `/archive/chapter/${ch.id}`}
+              />
+            ))}
+          </div>
+        </section>
+
+        {/* Orb area */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-8 py-12">
+          <VoiceOrb state={orbState} onClick={handleOrbClick} disabled={isSessionActive} />
+
+          {/* State label */}
+          <p
+            className="text-lg tracking-wide transition-all duration-300"
+            style={{ color: isSessionActive ? 'var(--accent)' : 'var(--text-muted)' }}
+          >
+            {isSessionActive ? orbLabels[orbState] : orbLabels['idle']}
+          </p>
+
+          {/* Chapter label during session */}
+          {isSessionActive && selectedChapterTitle && (
+            <p className="text-base -mt-4" style={{ color: 'var(--text-muted)' }}>
+              Тема: {selectedChapterTitle}
+            </p>
+          )}
+
+          {/* Session controls */}
+          {isSessionActive && (
+            <div className="flex items-center gap-8 mt-2">
+              <input
+                type="file"
+                ref={fileRef}
+                className="hidden"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.txt"
+                onChange={(e) => e.target.files && handleAttach(e.target.files)}
+              />
+              <SessionButton
+                icon={
+                  <div className="relative">
+                    <ImagePlus className="w-6 h-6" />
+                    {photoCount > 0 && (
+                      <span
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-medium"
+                        style={{ background: 'var(--accent)', color: '#0d0b09' }}
+                      >
+                        {photoCount}
+                      </span>
+                    )}
+                  </div>
+                }
+                label="Фото"
+                onClick={() => fileRef.current?.click()}
+              />
+              <SessionButton
+                icon={<Pause className="w-6 h-6" />}
+                label="Пауза"
+                onClick={handlePause}
+              />
+              <SessionButton
+                icon={<X className="w-6 h-6" />}
+                label="Завершить"
+                onClick={handleEnd}
+                danger
+              />
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* Photo upload toast */}
       {photoToast && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm shadow-lg"
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 px-5 py-3 rounded-xl text-base shadow-lg"
           style={{
             background: 'var(--bg-card)',
             border: '1px solid var(--accent-border)',
             color: 'var(--accent)',
           }}
         >
-          <CheckCircle2 className="w-4 h-4" />
+          <CheckCircle2 className="w-5 h-5" />
           {photoToast}
         </div>
       )}
@@ -342,7 +350,7 @@ function ChapterChip({
     color: selected ? 'var(--accent)' : 'var(--text-muted)',
     border: `1px solid ${selected ? 'var(--accent-border)' : 'var(--border)'}`,
   };
-  const className = 'flex-shrink-0 px-4 py-2 rounded-full text-sm transition-all duration-200';
+  const className = 'flex-shrink-0 px-5 py-3 rounded-full text-base transition-all duration-200';
 
   if (href && !disabled) {
     return (
@@ -378,13 +386,13 @@ function SessionButton({
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-1.5"
-      style={{ opacity: 0.65 }}
+      className="flex flex-col items-center gap-2"
+      style={{ opacity: 0.7 }}
       onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-      onMouseLeave={e => (e.currentTarget.style.opacity = '0.65')}
+      onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
     >
       <div
-        className="w-12 h-12 rounded-full flex items-center justify-center"
+        className="w-16 h-16 rounded-full flex items-center justify-center"
         style={{
           background: danger ? 'rgba(220,80,60,0.15)' : 'rgba(255,255,255,0.07)',
           border: `1px solid ${danger ? 'rgba(220,80,60,0.25)' : 'var(--border)'}`,
@@ -393,7 +401,7 @@ function SessionButton({
       >
         {icon}
       </div>
-      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
         {label}
       </span>
     </button>
