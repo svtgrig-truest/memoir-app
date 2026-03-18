@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import { Download, FileText, BookOpen } from 'lucide-react';
 
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,61 +18,122 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   if (!session) notFound();
 
   const sessionData = session as Record<string, unknown>;
-  // Supabase returns one-to-one (unique FK) as object, not array
   const txRaw = sessionData.transcripts;
   const transcript: Record<string, unknown> | null =
     Array.isArray(txRaw) ? (txRaw[0] ?? null) : (txRaw as Record<string, unknown> | null) ?? null;
   const chapter = sessionData.chapters as Record<string, unknown> | null;
 
+  const dateStr = new Date(sessionData.started_at as string).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
   return (
-    <main className="min-h-screen bg-zinc-950 text-white p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <main
+      className="min-h-screen p-6 max-w-5xl mx-auto"
+      style={{ background: 'var(--bg)', color: 'var(--text)' }}
+    >
+      {/* Navigation */}
+      <Link
+        href="/family/dashboard"
+        className="inline-flex items-center gap-1.5 text-sm mb-6 transition-colors"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        ← Назад к архиву
+      </Link>
+
+      {/* Session header */}
+      <div className="flex items-start justify-between mb-8 gap-4">
         <div>
-          <Link href="/family/dashboard" className="text-white/40 text-sm hover:text-white">
-            ← Назад
-          </Link>
-          <h1 className="text-xl font-bold mt-1">
-            {(chapter?.title_ru as string) ?? 'Свободный разговор'}
-          </h1>
-          <p className="text-white/40 text-sm">
-            {new Date(sessionData.started_at as string).toLocaleDateString('ru-RU', {
-              day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
-            })}
+          <div className="flex items-center gap-2 mb-1">
+            <BookOpen className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+            <h1 className="text-xl font-semibold">
+              {(chapter?.title_ru as string) ?? 'Свободный разговор'}
+            </h1>
+          </div>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            {dateStr}
           </p>
         </div>
 
         {transcript && (
-          <div className="flex gap-2">
-            <a
-              href={`/api/export?session_id=${id}&type=raw`}
-              className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
-            >
-              ↓ Транскрипт .txt
-            </a>
-            <a
-              href={`/api/export?session_id=${id}&type=polished`}
-              className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
-            >
-              ↓ Мемуар .txt
-            </a>
-            <a
+          <div className="flex flex-col gap-2 flex-shrink-0">
+            <ExportButton
               href={`/api/export?session_id=${id}&type=pdf`}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm transition-colors"
-            >
-              ↓ PDF
-            </a>
+              label="Скачать PDF"
+              icon={<Download className="w-4 h-4" />}
+              primary
+            />
+            <div className="flex gap-2">
+              <ExportButton
+                href={`/api/export?session_id=${id}&type=polished`}
+                label="История .txt"
+                icon={<BookOpen className="w-3.5 h-3.5" />}
+              />
+              <ExportButton
+                href={`/api/export?session_id=${id}&type=raw`}
+                label="Разговор .txt"
+                icon={<FileText className="w-3.5 h-3.5" />}
+              />
+            </div>
           </div>
         )}
       </div>
 
+      {/* Transcript */}
       {transcript ? (
         <TranscriptViewer
           rawText={(transcript.raw_text as string) ?? ''}
           polishedText={(transcript.polished_text as string) ?? ''}
         />
       ) : (
-        <p className="text-white/40">Транскрипт ещё обрабатывается...</p>
+        <div
+          className="rounded-2xl px-6 py-10 text-center"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+        >
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            История обрабатывается, загляните чуть позже...
+          </p>
+        </div>
       )}
     </main>
+  );
+}
+
+function ExportButton({
+  href,
+  label,
+  icon,
+  primary,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  primary?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all"
+      style={
+        primary
+          ? {
+              background: 'var(--accent-dim)',
+              color: 'var(--accent)',
+              border: '1px solid var(--accent-border)',
+            }
+          : {
+              background: 'var(--bg-card)',
+              color: 'var(--text-muted)',
+              border: '1px solid var(--border)',
+            }
+      }
+    >
+      {icon}
+      {label}
+    </a>
   );
 }
