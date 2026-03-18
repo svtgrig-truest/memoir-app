@@ -27,7 +27,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
     : 'Цель текущей беседы: следуй за тем, что хочет рассказать собеседник.';
 
   const heritageSection = heritageSummary
-    ? `\n\nКонтекст семьи:\n${heritageSummary}`
+    ? `\n\nСемейные документы (используй эти сведения точно — это полный текст оригиналов):\n${heritageSummary}`
     : '';
 
   const summarySection = sessionSummaries.length
