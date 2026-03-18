@@ -2,6 +2,8 @@ export interface SystemPromptOptions {
   chapterTitle: string | null;
   heritageSummary: string | null;
   sessionSummaries: string[];
+  lastChapterShortTitle?: string | null;
+  lastChapterSummary?: string | null;
 }
 
 export interface TurnMessage {
@@ -18,7 +20,7 @@ export interface RealtimeConnection {
 }
 
 export function buildSystemPrompt(opts: SystemPromptOptions): string {
-  const { chapterTitle, heritageSummary, sessionSummaries } = opts;
+  const { chapterTitle, heritageSummary, sessionSummaries, lastChapterShortTitle, lastChapterSummary } = opts;
 
   const chapterContext = chapterTitle
     ? `Цель текущей беседы: исследуй тему — «${chapterTitle}».`
@@ -32,6 +34,21 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
     ? `\n\nПредыдущие беседы:\n${sessionSummaries.join('\n')}`
     : '';
 
+  // Greeting instruction — context-aware
+  let greetingSection: string;
+  if (chapterTitle) {
+    if (lastChapterSummary || lastChapterShortTitle) {
+      const lastRef = lastChapterShortTitle
+        ? `«${lastChapterShortTitle}»`
+        : 'вашем прошлом разговоре';
+      greetingSection = `\n\nПОРЯДОК НАЧАЛА: Сразу начни беседу сам — не жди, когда заговорит собеседник. Поздоровайся тепло. Скажи, что в прошлый раз вы говорили о ${lastRef}${lastChapterSummary ? `, а именно: ${lastChapterSummary}` : ''}. Спроси, хочет ли он продолжить эту нить или рассказать что-то новое из темы «${chapterTitle}». Один вопрос.`;
+    } else {
+      greetingSection = `\n\nПОРЯДОК НАЧАЛА: Сразу начни беседу сам — не жди, когда заговорит собеседник. Поздоровайся тепло. Скажи, что сегодня начинаете разговор о теме «${chapterTitle}». Задай первый открытый вопрос — мягко, без давления. Один вопрос.`;
+    }
+  } else {
+    greetingSection = `\n\nПОРЯДОК НАЧАЛА: Сразу начни беседу сам — не жди, когда заговорит собеседник. Поздоровайся тепло. Спроси, о чём сегодня хочется поговорить. Один вопрос.`;
+  }
+
   return `Ты тёплый, любопытный, эмпатичный интервьюер, помогающий пожилому человеку записать историю его жизни. Говори только по-русски. Будь терпелив, внимателен и никогда не торопи собеседника.
 
 Правила:
@@ -42,7 +59,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
 - Никогда не поправляй и не перебивай
 - После примерно 40 минут мягко предложи завершить беседу
 
-${chapterContext}${heritageSection}${summarySection}`;
+${chapterContext}${heritageSection}${summarySection}${greetingSection}`;
 }
 
 export async function connectToRealtime(
@@ -68,6 +85,7 @@ export async function connectToRealtime(
   // Data channel for events
   const dc = pc.createDataChannel('oai-events');
   dc.onopen = () => {
+    // Configure the session with system prompt
     dc.send(JSON.stringify({
       type: 'session.update',
       session: {
@@ -80,6 +98,13 @@ export async function connectToRealtime(
         },
       },
     }));
+
+    // Trigger AI to speak first after session is configured
+    setTimeout(() => {
+      if (dc.readyState === 'open') {
+        dc.send(JSON.stringify({ type: 'response.create' }));
+      }
+    }, 400);
   };
   dc.onmessage = (e) => {
     try {
