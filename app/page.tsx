@@ -187,15 +187,26 @@ export default function Home() {
         <span className="text-xl font-semibold tracking-wide" style={{ color: 'var(--accent)' }}>
           Memoir
         </span>
-        <a
-          href="/family"
-          className="text-sm transition-colors"
-          style={{ color: 'var(--text-muted)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-        >
-          Семейный архив →
-        </a>
+        <div className="flex items-center gap-4">
+          <a
+            href="/archive"
+            className="text-sm transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+          >
+            Мои записи →
+          </a>
+          <a
+            href="/family"
+            className="text-sm transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+          >
+            Семейный архив →
+          </a>
+        </div>
       </header>
 
       {/* Chapter selector */}
