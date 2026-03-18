@@ -93,18 +93,21 @@ export async function connectToRealtime(
         input_audio_transcription: { model: 'whisper-1' },
         turn_detection: {
           type: 'server_vad',
-          silence_duration_ms: 800,
-          threshold: 0.5,
+          silence_duration_ms: 1200,
+          threshold: 0.6,
+          prefix_padding_ms: 300,
         },
       },
     }));
 
-    // Trigger AI to speak first after session is configured
+    // Trigger AI to speak first after session is configured.
+    // Clear the audio buffer first to prevent mic noise accumulated during
+    // WebRTC setup from triggering a spurious VAD response alongside ours.
     setTimeout(() => {
-      if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'response.create' }));
-      }
-    }, 400);
+      if (dc.readyState !== 'open') return;
+      dc.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+      dc.send(JSON.stringify({ type: 'response.create' }));
+    }, 500);
   };
   dc.onmessage = (e) => {
     try {
