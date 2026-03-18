@@ -49,113 +49,8 @@ export function TranscriptViewer({ rawText, polishedText: initialPolished, trans
     setSaveError(null);
   };
 
-  const RawPanel = () => (
-    <div
-      className="rounded-2xl p-6"
-      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
-    >
-      <p className="text-xs uppercase tracking-widest mb-4" style={{ color: 'var(--text-muted)' }}>
-        Оригинальный разговор
-      </p>
-      <pre
-        className="text-sm whitespace-pre-wrap leading-relaxed"
-        style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}
-      >
-        {rawText || <span style={{ color: 'var(--text-muted)' }}>Нет данных</span>}
-      </pre>
-    </div>
-  );
-
-  const PolishedPanel = () => (
-    <div
-      className="rounded-2xl p-6"
-      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
-    >
-      <div className="flex items-center justify-between mb-4 gap-3">
-        <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
-          Литературная история
-        </p>
-        {!editing ? (
-          <button
-            onClick={() => { setEditValue(polishedText); setEditing(true); }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all"
-            style={{
-              color: 'var(--text-muted)',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid var(--border)',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-          >
-            <Pencil className="w-3 h-3" />
-            Редактировать
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all disabled:opacity-50"
-              style={{
-                background: 'var(--accent-dim)',
-                color: 'var(--accent)',
-                border: '1px solid var(--accent-border)',
-              }}
-            >
-              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-              {saving ? 'Сохранение...' : 'Сохранить'}
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all disabled:opacity-50"
-              style={{
-                color: 'var(--text-muted)',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid var(--border)',
-              }}
-            >
-              <X className="w-3 h-3" />
-              Отмена
-            </button>
-          </div>
-        )}
-      </div>
-
-      {editing ? (
-        <>
-          <textarea
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            className="w-full text-sm leading-relaxed resize-y rounded-xl p-4 outline-none transition-all"
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid var(--border)',
-              color: 'var(--text)',
-              fontFamily: 'inherit',
-              minHeight: '300px',
-            }}
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent-border)')}
-            onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-          />
-          {saveError && (
-            <p className="text-xs mt-2" style={{ color: '#e05040' }}>
-              {saveError}
-            </p>
-          )}
-        </>
-      ) : (
-        <p
-          className="text-sm leading-relaxed whitespace-pre-wrap"
-          style={{ color: 'var(--text)' }}
-        >
-          {polishedText || (
-            <span style={{ color: 'var(--text-muted)' }}>История ещё не готова</span>
-          )}
-        </p>
-      )}
-    </div>
-  );
+  const showRaw = view === 'raw' || view === 'split';
+  const showPolished = view === 'polished' || view === 'split';
 
   return (
     <div className="space-y-4">
@@ -192,8 +87,115 @@ export function TranscriptViewer({ rawText, polishedText: initialPolished, trans
       <div
         className={`grid gap-4 ${view === 'split' ? 'md:grid-cols-2 grid-cols-1' : 'grid-cols-1'}`}
       >
-        {(view === 'raw' || view === 'split') && <RawPanel />}
-        {(view === 'polished' || view === 'split') && <PolishedPanel />}
+        {/* Raw transcript panel */}
+        {showRaw && (
+          <div
+            className="rounded-2xl p-6"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+          >
+            <p className="text-xs uppercase tracking-widest mb-4" style={{ color: 'var(--text-muted)' }}>
+              Оригинальный разговор
+            </p>
+            <pre
+              className="text-sm whitespace-pre-wrap leading-relaxed"
+              style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}
+            >
+              {rawText || <span style={{ color: 'var(--text-muted)' }}>Нет данных</span>}
+            </pre>
+          </div>
+        )}
+
+        {/* Polished text panel */}
+        {showPolished && (
+          <div
+            className="rounded-2xl p-6"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center justify-between mb-4 gap-3">
+              <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
+                Литературная история
+              </p>
+              {!editing ? (
+                <button
+                  onClick={() => { setEditValue(polishedText); setEditing(true); }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all"
+                  style={{
+                    color: 'var(--text-muted)',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--border)',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+                >
+                  <Pencil className="w-3 h-3" />
+                  Редактировать
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all disabled:opacity-50"
+                    style={{
+                      background: 'var(--accent-dim)',
+                      color: 'var(--accent)',
+                      border: '1px solid var(--accent-border)',
+                    }}
+                  >
+                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    {saving ? 'Сохранение...' : 'Сохранить'}
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all disabled:opacity-50"
+                    style={{
+                      color: 'var(--text-muted)',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <X className="w-3 h-3" />
+                    Отмена
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {editing ? (
+              <>
+                <textarea
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="w-full text-sm leading-relaxed resize-y rounded-xl p-4 outline-none transition-all"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text)',
+                    fontFamily: 'inherit',
+                    minHeight: '300px',
+                  }}
+                  onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent-border)')}
+                  onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                />
+                {saveError && (
+                  <p className="text-xs mt-2" style={{ color: '#e05040' }}>
+                    {saveError}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p
+                className="text-sm leading-relaxed whitespace-pre-wrap"
+                style={{ color: 'var(--text)' }}
+              >
+                {polishedText || (
+                  <span style={{ color: 'var(--text-muted)' }}>История ещё не готова</span>
+                )}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
