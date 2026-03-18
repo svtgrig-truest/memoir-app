@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
         const text = data.output?.[0]?.content?.[0]?.text ?? data.output_text ?? null;
         if (text) {
           heritageParts.push(`[${doc.filename}]\n${text}`);
-          supabaseAdmin.from('heritage_docs').update({ summary_text: text }).eq('id', doc.id).catch(() => {});
+          void supabaseAdmin.from('heritage_docs').update({ summary_text: text }).eq('id', doc.id).then(() => {}, () => {});
         }
       }
     } catch (err) {
