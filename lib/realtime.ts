@@ -88,22 +88,8 @@ export async function connectToRealtime(
   // Data channel for events
   const dc = pc.createDataChannel('oai-events');
 
-  // Silence follow-up: if user doesn't speak within SILENCE_MS after AI finishes,
-  // trigger another response so AI asks the next question itself.
-  const SILENCE_MS = 15000;
-  let silenceTimer: ReturnType<typeof setTimeout> | null = null;
-  const clearSilenceTimer = () => {
-    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-  };
-  const scheduleSilenceFollowUp = () => {
-    clearSilenceTimer();
-    silenceTimer = setTimeout(() => {
-      if (dc.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
-        dc.send(JSON.stringify({ type: 'response.create' }));
-      }
-    }, SILENCE_MS);
-  };
+  // No silence timer — AI asks one question and waits indefinitely for a response.
+  const clearSilenceTimer = () => {};
 
   dc.onopen = () => {
     // Configure the session with system prompt
@@ -135,20 +121,14 @@ export async function connectToRealtime(
       const event = JSON.parse(e.data as string) as Record<string, unknown>;
 
       // Silence follow-up timer management
-      if (event.type === 'response.audio.done') {
-        // AI finished speaking — start the silence counter
-        scheduleSilenceFollowUp();
-      }
+      // No silence follow-up: AI waits for user to speak
       if (event.type === 'input_audio_buffer.speech_started') {
         // User started speaking: cancel any in-progress AI response (barge-in)
-        clearSilenceTimer();
         if (dc.readyState === 'open') {
           dc.send(JSON.stringify({ type: 'response.cancel' }));
         }
       }
-      if (event.type === 'response.created') {
-        clearSilenceTimer();
-      }
+
 
       onEvent(event);
     } catch {
@@ -185,7 +165,7 @@ export async function connectToRealtime(
     stream,
     audioEl,
     disconnect: () => {
-      clearSilenceTimer();
+      
       stream.getTracks().forEach((t) => t.stop());
       pc.close();
       audioEl.srcObject = null;
