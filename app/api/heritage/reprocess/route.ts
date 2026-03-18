@@ -33,37 +33,39 @@ export async function POST(req: NextRequest) {
         messages: [{ role: 'user', content: `${SUMMARY_PROMPT}\n\n${text.substring(0, 8000)}` }],
       });
       summaryText = res.choices[0].message.content ?? null;
-
-    } else if (doc.mime_type === 'application/pdf') {
+    } else {
+      // PDF and DOCX — OpenAI Responses API
       const base64 = Buffer.from(buffer).toString('base64');
-      const res = await (openai as any).responses.create({
-        model: 'gpt-4o',
-        input: [
-          {
-            role: 'user',
-            content: [
-              { type: 'input_file', filename: doc.filename, file_data: `data:application/pdf;base64,${base64}` },
-              { type: 'input_text', text: SUMMARY_PROMPT },
-            ],
-          },
-        ],
-      });
-      summaryText = (res as any).output_text ?? null;
-
-    } else if (
-      doc.mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      doc.mime_type === 'application/msword'
-    ) {
-      const mammoth = await import('mammoth');
-      const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
-      const text = result.value;
-      if (text.trim()) {
-        const res = await openai.chat.completions.create({
+      const res = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           model: 'gpt-4o',
-          messages: [{ role: 'user', content: `${SUMMARY_PROMPT}\n\n${text.substring(0, 8000)}` }],
-        });
-        summaryText = res.choices[0].message.content ?? null;
+          input: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_file',
+                  filename: doc.filename,
+                  file_data: `data:${doc.mime_type};base64,${base64}`,
+                },
+                { type: 'input_text', text: SUMMARY_PROMPT },
+              ],
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('Responses API error:', res.status, errText);
+        throw new Error(`OpenAI Responses API: ${res.status}`);
       }
+      const data = await res.json() as { output?: { content?: { text?: string }[] }[] };
+      summaryText = data.output?.[0]?.content?.[0]?.text ?? null;
     }
   } catch (err) {
     console.error('Reprocess failed:', err);
