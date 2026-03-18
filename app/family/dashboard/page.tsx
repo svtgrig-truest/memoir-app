@@ -4,10 +4,16 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { BookOpen, FileText } from 'lucide-react';
 
+interface TranscriptMeta {
+  id: string;
+  short_title: string | null;
+}
+
 interface SessionRow {
   id: string;
   started_at: string;
   status: string;
+  transcripts: TranscriptMeta[] | TranscriptMeta | null;
 }
 
 interface ChapterWithSessions {
@@ -17,26 +23,36 @@ interface ChapterWithSessions {
   sessions: SessionRow[];
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('ru-RU', {
+function getShortTitle(session: SessionRow): string | null {
+  const t = session.transcripts;
+  if (!t) return null;
+  const item = Array.isArray(t) ? t[0] : t;
+  return item?.short_title ?? null;
+}
+
+function formatDateTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('ru-RU', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
 export default async function Dashboard() {
   const { data: chapters } = await supabaseAdmin
     .from('chapters')
-    .select('id, title_ru, display_order, sessions(id, started_at, status)')
+    .select('id, title_ru, display_order, sessions(id, started_at, status, transcripts(id, short_title))')
     .order('display_order') as { data: ChapterWithSessions[] | null };
 
   const { data: untaggedSessions } = await supabaseAdmin
     .from('sessions')
-    .select('id, started_at, status')
+    .select('id, started_at, status, transcripts(id, short_title)')
     .is('chapter_id', null)
     .eq('status', 'complete')
-    .order('started_at', { ascending: false });
+    .order('started_at', { ascending: false }) as { data: SessionRow[] | null };
 
   const totalSessions =
     (chapters?.reduce((sum, ch) => sum + (ch.sessions?.length ?? 0), 0) ?? 0) +
@@ -115,12 +131,19 @@ export default async function Dashboard() {
                     href={`/family/dashboard/session/${session.id}`}
                     className="flex items-center justify-between px-5 py-3.5 transition-colors group"
                     style={{ color: 'var(--text-muted)' }}
-                    onMouseEnter={undefined}
                   >
-                    <span className="text-sm group-hover:text-[var(--text)] transition-colors">
-                      {formatDate(session.started_at)}
-                    </span>
-                    <span className="text-xs">→</span>
+                    <div>
+                      {getShortTitle(session) && (
+                        <p
+                          className="text-sm font-medium mb-0.5 group-hover:text-[var(--text)] transition-colors"
+                          style={{ color: 'var(--text)' }}
+                        >
+                          {getShortTitle(session)}
+                        </p>
+                      )}
+                      <p className="text-xs">{formatDateTime(session.started_at)}</p>
+                    </div>
+                    <span className="text-xs flex-shrink-0 ml-4">→</span>
                   </Link>
                 ))}
               </div>
@@ -155,10 +178,18 @@ export default async function Dashboard() {
                   className="flex items-center justify-between px-5 py-3.5 transition-colors group"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  <span className="text-sm group-hover:text-[var(--text)] transition-colors">
-                    {formatDate(session.started_at)}
-                  </span>
-                  <span className="text-xs">→</span>
+                  <div>
+                    {getShortTitle(session) && (
+                      <p
+                        className="text-sm font-medium mb-0.5 group-hover:text-[var(--text)] transition-colors"
+                        style={{ color: 'var(--text)' }}
+                      >
+                        {getShortTitle(session)}
+                      </p>
+                    )}
+                    <p className="text-xs">{formatDateTime(session.started_at)}</p>
+                  </div>
+                  <span className="text-xs flex-shrink-0 ml-4">→</span>
                 </Link>
               ))}
             </div>
