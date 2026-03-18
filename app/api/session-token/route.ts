@@ -1,24 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import { buildSystemPrompt } from '@/lib/realtime';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const chapterId: string | null = body.chapter_id ?? null;
 
-  // Create session record in DB first
-  const { data: session, error } = await supabaseAdmin
-    .from('sessions')
-    .insert({ chapter_id: chapterId, status: 'active' })
-    .select()
-    .single();
+  // Fetch context data + create session record in parallel
+  const [sessionResult, docsResult, transcriptsResult, chapterResult] = await Promise.all([
+    supabaseAdmin
+      .from('sessions')
+      .insert({ chapter_id: chapterId, status: 'active' })
+      .select()
+      .single(),
+    supabaseAdmin.from('heritage_docs').select('summary_text'),
+    supabaseAdmin
+      .from('transcripts')
+      .select('session_summary')
+      .not('session_summary', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(3),
+    chapterId
+      ? supabaseAdmin.from('chapters').select('title_ru').eq('id', chapterId).single()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
 
+  const { data: session, error } = sessionResult;
   if (error || !session) {
     return NextResponse.json(
       { error: error?.message ?? 'Failed to create session' },
       { status: 500 }
     );
   }
+
+  // Build system prompt server-side — anon key is never used for DB access
+  const heritageSummary =
+    docsResult.data?.map((d) => d.summary_text).filter(Boolean).join('\n') ?? null;
+  const sessionSummaries =
+    transcriptsResult.data?.map((t) => t.session_summary as string).filter(Boolean) ?? [];
+  const chapterTitle = (chapterResult.data as { title_ru?: string } | null)?.title_ru ?? null;
+  const systemPrompt = buildSystemPrompt({ chapterTitle, heritageSummary, sessionSummaries });
 
   // Get ephemeral token from OpenAI
   const realtimeSession = await openai.beta.realtime.sessions.create({
@@ -30,5 +52,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     client_secret: realtimeSession.client_secret,
     session_id: session.id,
+    system_prompt: systemPrompt,
   });
 }
