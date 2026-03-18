@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { SessionPhotos } from '@/components/SessionPhotos';
+import { TitleEditor } from '@/components/TitleEditor';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Download, FileText, BookOpen, Mic } from 'lucide-react';
@@ -75,16 +76,29 @@ export default async function ArchiveSessionPage({ params }: { params: Promise<{
 
       {/* Session header */}
       <div className="flex items-start justify-between mb-8 gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <BookOpen className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--accent)' }} />
-            <h1 className="text-xl font-semibold">
+        <div className="flex-1 min-w-0">
+          {/* Editable title */}
+          {transcript ? (
+            <div className="mb-2">
+              <TitleEditor
+                initialTitle={(transcript.short_title as string | null) ?? null}
+                transcriptId={transcript.id as string}
+              />
+            </div>
+          ) : (
+            <h1 className="text-2xl font-semibold mb-2">
               {(chapter?.title_ru as string) ?? 'Свободный разговор'}
             </h1>
+          )}
+          {/* Chapter + date meta */}
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              {(chapter?.title_ru as string) ?? 'Свободный разговор'}
+            </span>
+            <span className="text-sm" style={{ color: 'var(--border)' }}>·</span>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
           </div>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            {dateStr}
-          </p>
         </div>
 
         {transcript && (
