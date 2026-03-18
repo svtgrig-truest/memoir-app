@@ -66,12 +66,17 @@ export default function Home() {
     setOrbState('thinking');
     setPhotoCount(0);
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+
     try {
       const tokenRes = await fetch('/api/session-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chapter_id: chapterId }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!tokenRes.ok) throw new Error('Failed to get session token');
       const { client_secret, session_id, system_prompt } = await tokenRes.json();
@@ -107,8 +112,10 @@ export default function Home() {
       setIsSessionActive(true);
       setOrbState('listening');
     } catch (err) {
+      clearTimeout(timeout);
       console.error('Failed to start session:', err);
       setOrbState('idle');
+      showToast('Не удалось подключиться. Попробуйте ещё раз.');
     } finally {
       isConnectingRef.current = false;
     }
