@@ -44,6 +44,7 @@ export default async function ArchivePage() {
   const { data: chapters } = await supabaseAdmin
     .from('chapters')
     .select('id, title_ru, display_order, sessions(id, started_at, status, transcripts(id, short_title))')
+    .neq('theme', 'free')
     .order('display_order') as { data: ChapterWithSessions[] | null };
 
   const { data: untaggedSessions } = await supabaseAdmin
