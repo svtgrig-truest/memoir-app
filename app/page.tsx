@@ -33,6 +33,12 @@ export default function Home() {
       .catch((err) => console.error('Failed to load chapters:', err));
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const chapterId = params.get('chapter');
+    if (chapterId) setSelectedChapterId(chapterId);
+  }, []);
+
   const showToast = (msg: string) => {
     setPhotoToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -228,6 +234,7 @@ export default function Home() {
               selected={selectedChapterId === ch.id}
               disabled={isSessionActive}
               onClick={() => setSelectedChapterId(ch.id)}
+              href={isSessionActive ? undefined : `/archive/chapter/${ch.id}`}
             />
           ))}
         </div>
@@ -318,22 +325,35 @@ function ChapterChip({
   selected,
   disabled,
   onClick,
+  href,
 }: {
   label: string;
   selected: boolean;
   disabled: boolean;
   onClick: () => void;
+  href?: string;
 }) {
+  const style = {
+    background: selected ? 'var(--accent-dim)' : 'rgba(255,255,255,0.04)',
+    color: selected ? 'var(--accent)' : 'var(--text-muted)',
+    border: `1px solid ${selected ? 'var(--accent-border)' : 'var(--border)'}`,
+  };
+  const className = 'flex-shrink-0 px-4 py-2 rounded-full text-sm transition-all duration-200';
+
+  if (href && !disabled) {
+    return (
+      <a href={href} className={className} style={style}>
+        {label}
+      </a>
+    );
+  }
+
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex-shrink-0 px-4 py-2 rounded-full text-sm transition-all duration-200 disabled:cursor-default"
-      style={{
-        background: selected ? 'var(--accent-dim)' : 'rgba(255,255,255,0.04)',
-        color: selected ? 'var(--accent)' : 'var(--text-muted)',
-        border: `1px solid ${selected ? 'var(--accent-border)' : 'var(--border)'}`,
-      }}
+      className={`${className} disabled:cursor-default`}
+      style={style}
     >
       {label}
     </button>
