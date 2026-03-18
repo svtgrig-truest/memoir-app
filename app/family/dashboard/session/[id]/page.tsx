@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
+import { SessionPhotos } from '@/components/SessionPhotos';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Download, FileText, BookOpen } from 'lucide-react';
@@ -9,11 +10,18 @@ import { Download, FileText, BookOpen } from 'lucide-react';
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const { data: session } = await supabaseAdmin
-    .from('sessions')
-    .select('*, transcripts(*), chapters(title_ru)')
-    .eq('id', id)
-    .single();
+  const [{ data: session }, { data: photos }] = await Promise.all([
+    supabaseAdmin
+      .from('sessions')
+      .select('*, transcripts(*), chapters(title_ru)')
+      .eq('id', id)
+      .single(),
+    supabaseAdmin
+      .from('session_media')
+      .select('id, file_url, mime_type, created_at')
+      .eq('session_id', id)
+      .order('created_at'),
+  ]);
 
   if (!session) notFound();
 
@@ -83,22 +91,31 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         )}
       </div>
 
-      {/* Transcript */}
-      {transcript ? (
-        <TranscriptViewer
-          rawText={(transcript.raw_text as string) ?? ''}
-          polishedText={(transcript.polished_text as string) ?? ''}
+      {/* Main content */}
+      <div className="space-y-6">
+        {/* Transcript */}
+        {transcript ? (
+          <TranscriptViewer
+            rawText={(transcript.raw_text as string) ?? ''}
+            polishedText={(transcript.polished_text as string) ?? ''}
+          />
+        ) : (
+          <div
+            className="rounded-2xl px-6 py-10 text-center"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+          >
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              История обрабатывается, загляните чуть позже...
+            </p>
+          </div>
+        )}
+
+        {/* Photos — always visible, can add at any time */}
+        <SessionPhotos
+          sessionId={id}
+          initialPhotos={photos ?? []}
         />
-      ) : (
-        <div
-          className="rounded-2xl px-6 py-10 text-center"
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
-        >
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            История обрабатывается, загляните чуть позже...
-          </p>
-        </div>
-      )}
+      </div>
     </main>
   );
 }
