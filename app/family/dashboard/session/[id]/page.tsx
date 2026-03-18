@@ -98,6 +98,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           <TranscriptViewer
             rawText={(transcript.raw_text as string) ?? ''}
             polishedText={(transcript.polished_text as string) ?? ''}
+            transcriptId={transcript.id as string}
           />
         ) : (
           <div
