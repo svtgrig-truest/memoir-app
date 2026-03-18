@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const chapterId: string | null = body.chapter_id ?? null;
 
   // Fetch context data + create session record in parallel
-  const [sessionResult, docsResult, transcriptsResult, chapterResult] = await Promise.all([
+  const [sessionResult, docsResult, transcriptsResult, chapterResult, lastChapterResult] = await Promise.all([
     supabaseAdmin
       .from('sessions')
       .insert({ chapter_id: chapterId, status: 'active' })
@@ -24,6 +24,17 @@ export async function POST(req: NextRequest) {
     chapterId
       ? supabaseAdmin.from('chapters').select('title_ru').eq('id', chapterId).single()
       : Promise.resolve({ data: null, error: null }),
+    // Last completed session for this chapter (to build greeting context)
+    chapterId
+      ? supabaseAdmin
+          .from('sessions')
+          .select('transcripts(short_title, session_summary)')
+          .eq('chapter_id', chapterId)
+          .eq('status', 'complete')
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const { data: session, error } = sessionResult;
@@ -34,13 +45,32 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Extract last chapter session transcript
+  const lastChapterData = lastChapterResult.data as {
+    transcripts: { short_title: string | null; session_summary: string | null } | null
+      | { short_title: string | null; session_summary: string | null }[]
+  } | null;
+  const lastChapterTx = lastChapterData?.transcripts
+    ? Array.isArray(lastChapterData.transcripts)
+      ? lastChapterData.transcripts[0]
+      : lastChapterData.transcripts
+    : null;
+  const lastChapterShortTitle = lastChapterTx?.short_title ?? null;
+  const lastChapterSummary = lastChapterTx?.session_summary ?? null;
+
   // Build system prompt server-side — anon key is never used for DB access
   const heritageSummary =
     docsResult.data?.map((d) => d.summary_text).filter(Boolean).join('\n') ?? null;
   const sessionSummaries =
     transcriptsResult.data?.map((t) => t.session_summary as string).filter(Boolean) ?? [];
   const chapterTitle = (chapterResult.data as { title_ru?: string } | null)?.title_ru ?? null;
-  const systemPrompt = buildSystemPrompt({ chapterTitle, heritageSummary, sessionSummaries });
+  const systemPrompt = buildSystemPrompt({
+    chapterTitle,
+    heritageSummary,
+    sessionSummaries,
+    lastChapterShortTitle,
+    lastChapterSummary,
+  });
 
   // Get ephemeral token from OpenAI
   const realtimeSession = await openai.beta.realtime.sessions.create({
