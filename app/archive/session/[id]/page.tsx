@@ -59,7 +59,7 @@ export default async function ArchiveSessionPage({ params }: { params: Promise<{
         {/* Continue conversation button */}
         {chapterId && (
           <a
-            href={`/?chapter=${chapterId}`}
+            href={`/?chapter=${chapterId}&autostart=1`}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
             style={{
               background: 'var(--accent-dim)',
