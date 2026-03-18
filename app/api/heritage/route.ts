@@ -3,21 +3,22 @@ import { openai } from '@/lib/openai';
 import { toFile } from 'openai';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
-const SUMMARY_PROMPT =
-  'Прочитай этот документ о семье и напиши плотное резюме (максимум 300 слов) всех ключевых фактов: имена, даты, места, события, семейные связи. Это резюме будет использовано как контекст для интервьюера. Только факты — никаких предположений.';
+// Max characters stored per document. Long enough for full books.
+const MAX_CHARS = 30_000;
 
-async function summarise(buffer: ArrayBuffer, filename: string, mimeType: string): Promise<string | null> {
+const EXTRACT_PROMPT =
+  'Извлеки полный текст этого документа дословно — точь-в-точь как в оригинале. ' +
+  'Сохрани все имена, даты, места, события, семейные связи и любые детали. ' +
+  'Ничего не сокращай, не перефразируй и не опускай. Выведи только текст документа.';
+
+async function extractText(buffer: ArrayBuffer, filename: string, mimeType: string): Promise<string | null> {
   try {
     if (mimeType === 'text/plain') {
-      const text = Buffer.from(buffer).toString('utf-8');
-      const res = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: `${SUMMARY_PROMPT}\n\n${text.substring(0, 8000)}` }],
-      });
-      return res.choices[0].message.content ?? null;
+      // Plain text — store as-is, no GPT needed
+      return Buffer.from(buffer).toString('utf-8').slice(0, MAX_CHARS);
     }
 
-    // PDF / DOCX — upload to OpenAI Files API, then use Responses API with file_id
+    // PDF / DOCX — upload to OpenAI Files API, then extract verbatim via Responses API
     let fileId: string | null = null;
     try {
       const uploaded = await openai.files.create({
@@ -39,7 +40,7 @@ async function summarise(buffer: ArrayBuffer, filename: string, mimeType: string
               role: 'user',
               content: [
                 { type: 'input_file', file_id: fileId },
-                { type: 'input_text', text: SUMMARY_PROMPT },
+                { type: 'input_text', text: EXTRACT_PROMPT },
               ],
             },
           ],
@@ -55,12 +56,13 @@ async function summarise(buffer: ArrayBuffer, filename: string, mimeType: string
         output?: { content?: { text?: string }[] }[];
         output_text?: string;
       };
-      return data.output?.[0]?.content?.[0]?.text ?? data.output_text ?? null;
+      const text = data.output?.[0]?.content?.[0]?.text ?? data.output_text ?? null;
+      return text ? text.slice(0, MAX_CHARS) : null;
     } finally {
       if (fileId) openai.files.del(fileId).catch(() => {});
     }
   } catch (err) {
-    console.error('Heritage summarise failed:', err);
+    console.error('Heritage extract failed:', err);
     return null;
   }
 }
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
 
   const { data: { publicUrl } } = supabaseAdmin.storage.from('Media').getPublicUrl(storagePath);
 
-  const summaryText = await summarise(buffer, file.name, file.type);
+  const summaryText = await extractText(buffer, file.name, file.type);
 
   const { error: insertError } = await supabaseAdmin.from('heritage_docs').insert({
     filename: file.name,
