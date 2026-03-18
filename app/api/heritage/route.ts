@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
+import { toFile } from 'openai';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
 const SUMMARY_PROMPT =
   'Прочитай этот документ о семье и напиши плотное резюме (максимум 300 слов) всех ключевых фактов: имена, даты, места, события, семейные связи. Это резюме будет использовано как контекст для интервьюера. Только факты — никаких предположений.';
 
-async function summariseBuffer(
-  buffer: ArrayBuffer,
-  filename: string,
-  mimeType: string
-): Promise<string | null> {
+async function summarise(buffer: ArrayBuffer, filename: string, mimeType: string): Promise<string | null> {
   try {
     if (mimeType === 'text/plain') {
       const text = Buffer.from(buffer).toString('utf-8');
@@ -20,13 +17,15 @@ async function summariseBuffer(
       return res.choices[0].message.content ?? null;
     }
 
-    // PDF and DOCX — use OpenAI Responses API (native file parsing)
-    if (
-      mimeType === 'application/pdf' ||
-      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      mimeType === 'application/msword'
-    ) {
-      const base64 = Buffer.from(buffer).toString('base64');
+    // PDF / DOCX — upload to OpenAI Files API, then use Responses API with file_id
+    let fileId: string | null = null;
+    try {
+      const uploaded = await openai.files.create({
+        file: await toFile(Buffer.from(buffer), filename, { type: mimeType }),
+        purpose: 'user_data',
+      });
+      fileId = uploaded.id;
+
       const res = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: {
@@ -39,24 +38,31 @@ async function summariseBuffer(
             {
               role: 'user',
               content: [
-                { type: 'input_file', filename, file_data: `data:${mimeType};base64,${base64}` },
+                { type: 'input_file', file_id: fileId },
                 { type: 'input_text', text: SUMMARY_PROMPT },
               ],
             },
           ],
         }),
       });
+
       if (!res.ok) {
         console.error('Responses API error:', res.status, await res.text());
         return null;
       }
-      const data = await res.json() as { output?: { content?: { text?: string }[] }[] };
-      return data.output?.[0]?.content?.[0]?.text ?? null;
+
+      const data = (await res.json()) as {
+        output?: { content?: { text?: string }[] }[];
+        output_text?: string;
+      };
+      return data.output?.[0]?.content?.[0]?.text ?? data.output_text ?? null;
+    } finally {
+      if (fileId) openai.files.del(fileId).catch(() => {});
     }
   } catch (err) {
     console.error('Heritage summarise failed:', err);
+    return null;
   }
-  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -82,7 +88,7 @@ export async function POST(req: NextRequest) {
 
   const { data: { publicUrl } } = supabaseAdmin.storage.from('Media').getPublicUrl(storagePath);
 
-  const summaryText = await summariseBuffer(buffer, file.name, file.type);
+  const summaryText = await summarise(buffer, file.name, file.type);
 
   const { error: insertError } = await supabaseAdmin.from('heritage_docs').insert({
     filename: file.name,
