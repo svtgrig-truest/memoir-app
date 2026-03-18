@@ -23,6 +23,7 @@ export default function Home() {
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const messagesRef = useRef<TurnMessage[]>([]);
   const isConnectingRef = useRef(false);
+  const autostartFiredRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,7 +39,8 @@ export default function Home() {
         // Pre-select: URL param takes priority, then last used chapter
         const resolvedChapterId = urlChapterId ?? data?.lastChapterId ?? null;
         setSelectedChapterId(resolvedChapterId);
-        if (autostart) {
+        if (autostart && !autostartFiredRef.current) {
+          autostartFiredRef.current = true;
           // Small delay so React flushes the selectedChapterId state before we start
           setTimeout(() => startSession(resolvedChapterId), 300);
         }
