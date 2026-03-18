@@ -10,13 +10,13 @@
 
 | Слой | Технология |
 |---|---|
-| Frontend | Next.js 15 (App Router), React 19 |
+| Frontend | Next.js 16 (App Router, Turbopack), React 19 |
 | Стили | Tailwind CSS v4, Framer Motion |
 | Голос | OpenAI Realtime API (WebRTC) |
-| AI pipeline | OpenAI GPT-4o (полировка, резюме, заголовки) |
-| База данных | Supabase (PostgreSQL + RLS) |
+| AI pipeline | OpenAI GPT-4o (полировка, резюме, заголовки); GPT-4o-mini (документы) |
+| База данных | Supabase (PostgreSQL + RLS + Storage) |
 | Аутентификация | Supabase Auth (семейный доступ по паролю) |
-| Деплой | Vercel (auto-deploy из GitHub) |
+| Деплой | Vercel (auto-deploy из GitHub main) |
 | PDF экспорт | jsPDF |
 
 ---
@@ -26,33 +26,37 @@
 ```
 memoir-app/
 ├── app/
-│   ├── page.tsx                  # Главная — голосовой интерфейс (орб)
+│   ├── page.tsx                        # Главная — голосовой интерфейс (орб)
 │   ├── archive/
-│   │   ├── page.tsx              # Список глав
-│   │   ├── chapter/[id]/page.tsx # Сессии в главе
-│   │   └── session/[id]/page.tsx # Детальная запись + TitleEditor
+│   │   ├── page.tsx                    # Список глав
+│   │   ├── chapter/[id]/page.tsx       # Сессии в главе
+│   │   └── session/[id]/page.tsx       # Детальная запись + TitleEditor
 │   └── family/
-│       ├── page.tsx              # Форма входа для семьи
-│       └── dashboard/page.tsx    # Семейный архив
+│       ├── page.tsx                    # Форма входа для семьи
+│       └── dashboard/
+│           ├── page.tsx                # Семейный архив (только чтение)
+│           └── heritage/page.tsx       # Семейные документы (загрузка PDF/DOCX/TXT)
 │
 ├── app/api/
-│   ├── chapters/route.ts         # GET: главы (без free), lastChapterId
-│   ├── session-token/route.ts    # POST: ephemeral token для OpenAI Realtime
-│   ├── session-end/route.ts      # POST: закрыть сессию, запустить pipeline
-│   ├── session-pause/route.ts    # POST: пауза сессии
-│   ├── transcript/route.ts       # GET/PATCH: текст + short_title
-│   ├── export/route.ts           # GET: PDF-экспорт главы
-│   ├── family-auth/route.ts      # POST: семейный пароль → cookie
-│   ├── heritage/route.ts         # GET: статистика для семейного архива
-│   └── upload/route.ts           # POST: загрузка файлов
+│   ├── session-token/route.ts          # Ephemeral token + system prompt (читает heritage docs)
+│   ├── session-end/route.ts            # Закрыть сессию, pipeline: полировка/резюме/заголовок
+│   ├── session-pause/route.ts          # Пауза сессии
+│   ├── chapters/route.ts               # GET: главы (без free), lastChapterId
+│   ├── transcript/route.ts             # GET/PATCH: текст + short_title
+│   ├── export/route.ts                 # GET: PDF-экспорт главы
+│   ├── family-auth/route.ts            # POST: семейный пароль → cookie
+│   └── heritage/
+│       ├── route.ts                    # POST: загрузить PDF/DOCX/TXT в Supabase Storage
+│       └── reprocess/route.ts          # POST: перечитать документ заново
 │
 ├── components/
-│   └── TitleEditor.tsx           # Инлайн-редактор заголовка записи
+│   ├── TitleEditor.tsx                 # Инлайн-редактор заголовка записи
+│   └── HeritageDocCard.tsx             # Карточка документа: имя файла + ссылка
 │
 ├── lib/
-│   ├── realtime.ts               # WebRTC-подключение, buildSystemPrompt, VAD, silence timer
-│   ├── pipeline.ts               # Полировка/резюме/заголовки через GPT-4o
-│   └── supabase.ts               # supabaseAdmin клиент (server-only)
+│   ├── realtime.ts                     # WebRTC, buildSystemPrompt, VAD, таймер тишины
+│   ├── pipeline.ts                     # buildPolishPrompt / buildSummaryPrompt / buildTitlePrompt
+│   └── supabase/server.ts              # supabaseAdmin (service role, server-only)
 ```
 
 ---
@@ -61,27 +65,25 @@ memoir-app/
 
 ### Голосовая сессия
 - Пользователь выбирает тему → нажимает орб → WebRTC соединяется с OpenAI Realtime API
-- VAD (Voice Activity Detection): threshold 0.6, silence 1200 ms
-- Таймер тишины 8 сек → ассистент задаёт следующий вопрос автоматически
-- Параметр `?autostart=1` запускает сессию без нажатия; убирается из URL сразу через `replaceState` (не остаётся в истории браузера)
+- VAD: threshold 0.6, silence 1200 ms; таймер тишины 8 сек → ассистент задаёт вопрос
+- `?autostart=1` запускает сессию без нажатия; убирается через `replaceState` сразу
 
 ### Pipeline транскрипта
 После завершения сессии (`/api/session-end`):
 1. Подсчёт слов пользователя — если < 8, транскрипт не создаётся
-2. Полировка разговора в мемуарную прозу (`buildPolishPrompt`)
-3. Генерация краткого резюме (`buildSummaryPrompt`)
-4. Генерация заголовка сессии (`buildTitlePrompt`)
+2. Параллельно: полировка прозы, резюме, заголовок, определение главы
+3. Заголовок генерируется с учётом уже существующих заголовков (нет повторений тем)
 
-Все три промпта содержат явный запрет на добавление деталей, не упомянутых пользователем.
+### Семейные документы (Heritage)
+- Семья загружает PDF, DOCX или TXT — файл сохраняется в Supabase Storage
+- При старте голосовой сессии API читает файлы по их URL через OpenAI Responses API и извлекает биографические факты (GPT-4o-mini)
+- Результат кешируется в `heritage_docs.summary_text`; при повторных сессиях используется кеш
+- Страница `/family/dashboard/heritage` показывает только название файла и ссылку
 
 ### Архив
 - Главы: Детство, Юность, Работа и карьера, Семья, Путешествия, Важные события
 - Бейдж «Мы остановились здесь» — последняя сессия в главе
 - Инлайн-редактирование заголовка записи (`TitleEditor`)
-
-### Семейный доступ
-- Отдельный маршрут `/family` с паролем
-- Только чтение: архив, PDF-экспорт
 
 ---
 
@@ -104,6 +106,7 @@ FAMILY_PASSWORD=
 | `chapters` | Темы разговора (display_order, theme, title_ru) |
 | `sessions` | Голосовые сессии (chapter_id, started_at, ended_at) |
 | `transcripts` | Полированный текст, резюме, short_title |
+| `heritage_docs` | Семейные документы (filename, file_url, mime_type, summary_text) |
 
 RLS включён. Все запросы из API-роутов используют `supabaseAdmin` (service role).
 
@@ -124,10 +127,4 @@ RLS включён. Все запросы из API-роутов использу
 
 ## Разработка и деплой
 
-```bash
-npm run dev      # локально на :3000
-```
-
-Деплой: push в `main` → Vercel автоматически пересобирает и деплоит.
-
-Изменения файлов производятся через GitHub API (curl + base64) из Replit-среды.
+Push в `main` → Vercel автоматически пересобирает. Изменения файлов производятся через GitHub API из Replit-среды. Repo: `svtgrig-truest/memoir-app`.
