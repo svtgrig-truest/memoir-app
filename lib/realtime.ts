@@ -86,6 +86,24 @@ export async function connectToRealtime(
 
   // Data channel for events
   const dc = pc.createDataChannel('oai-events');
+
+  // Silence follow-up: if user doesn't speak within SILENCE_MS after AI finishes,
+  // trigger another response so AI asks the next question itself.
+  const SILENCE_MS = 8000;
+  let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearSilenceTimer = () => {
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+  };
+  const scheduleSilenceFollowUp = () => {
+    clearSilenceTimer();
+    silenceTimer = setTimeout(() => {
+      if (dc.readyState === 'open') {
+        dc.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+        dc.send(JSON.stringify({ type: 'response.create' }));
+      }
+    }, SILENCE_MS);
+  };
+
   dc.onopen = () => {
     // Configure the session with system prompt
     dc.send(JSON.stringify({
@@ -113,7 +131,22 @@ export async function connectToRealtime(
   };
   dc.onmessage = (e) => {
     try {
-      onEvent(JSON.parse(e.data as string));
+      const event = JSON.parse(e.data as string) as Record<string, unknown>;
+
+      // Silence follow-up timer management
+      if (event.type === 'response.audio.done') {
+        // AI finished speaking — start the silence counter
+        scheduleSilenceFollowUp();
+      }
+      if (
+        event.type === 'input_audio_buffer.speech_started' ||
+        event.type === 'response.created'
+      ) {
+        // User started speaking or AI is already generating — cancel follow-up
+        clearSilenceTimer();
+      }
+
+      onEvent(event);
     } catch {
       // ignore malformed events
     }
@@ -148,6 +181,7 @@ export async function connectToRealtime(
     stream,
     audioEl,
     disconnect: () => {
+      clearSilenceTimer();
       stream.getTracks().forEach((t) => t.stop());
       pc.close();
       audioEl.srcObject = null;
