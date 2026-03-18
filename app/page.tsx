@@ -1,12 +1,17 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { VoiceOrb } from '@/components/VoiceOrb';
-import { ChapterSidebar } from '@/components/ChapterSidebar';
-import { TextInputBar } from '@/components/TextInputBar';
 import { supabase } from '@/lib/supabase/client';
 import { connectToRealtime, buildSystemPrompt, RealtimeConnection, TurnMessage } from '@/lib/realtime';
 import { Chapter, OrbState } from '@/types';
-import { Pause, X } from 'lucide-react';
+import { Pause, X, ImagePlus } from 'lucide-react';
+
+const orbLabels: Record<OrbState, string> = {
+  idle: 'Нажмите, чтобы начать',
+  listening: 'Слушаю вас...',
+  speaking: 'Отвечаю...',
+  thinking: 'Думаю...',
+};
 
 export default function Home() {
   const [orbState, setOrbState] = useState<OrbState>('idle');
@@ -17,6 +22,7 @@ export default function Home() {
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const messagesRef = useRef<TurnMessage[]>([]);
   const isConnectingRef = useRef(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     supabase
@@ -35,7 +41,6 @@ export default function Home() {
     setOrbState('thinking');
 
     try {
-      // Fetch heritage summaries and recent session summaries for system prompt
       const [{ data: docs }, { data: transcripts }] = await Promise.all([
         supabase.from('heritage_docs').select('summary_text'),
         supabase
@@ -55,7 +60,6 @@ export default function Home() {
 
       const systemPrompt = buildSystemPrompt({ chapterTitle, heritageSummary, sessionSummaries });
 
-      // Get ephemeral token + create session record
       const tokenRes = await fetch('/api/session-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,36 +71,25 @@ export default function Home() {
       setSessionId(session_id);
       messagesRef.current = [];
 
-      // Connect WebRTC to OpenAI Realtime API
       const conn = await connectToRealtime(
         client_secret.value,
         systemPrompt,
         (event) => {
-          // Drive orb animation from OpenAI events
           if (event.type === 'input_audio_buffer.speech_started') setOrbState('listening');
           if (event.type === 'response.created') setOrbState('thinking');
           if (event.type === 'response.audio.delta') setOrbState('speaking');
           if (event.type === 'response.audio.done') setOrbState('listening');
 
-          // Capture user audio transcripts (arrives after speech ends)
           if (event.type === 'conversation.item.input_audio_transcription.completed') {
             const text = (event.transcript as string)?.trim();
-            console.log('[transcript] user:', text);
-            if (text) {
-              messagesRef.current = [...messagesRef.current, { role: 'user', text }];
-            }
+            if (text) messagesRef.current = [...messagesRef.current, { role: 'user', text }];
           }
 
-          // Capture assistant audio transcripts
           if (event.type === 'response.audio_transcript.done') {
             const text = (event.transcript as string)?.trim();
-            console.log('[transcript] assistant:', text);
-            if (text) {
-              messagesRef.current = [...messagesRef.current, { role: 'assistant', text }];
-            }
+            if (text) messagesRef.current = [...messagesRef.current, { role: 'assistant', text }];
           }
 
-          // Debug: log all event types (remove after confirming transcription works)
           if (!['response.audio.delta', 'input_audio_buffer.appended'].includes(event.type as string)) {
             console.log('[realtime event]', event.type);
           }
@@ -121,10 +114,7 @@ export default function Home() {
     setIsSessionActive(false);
 
     if (sessionId) {
-      await supabase
-        .from('sessions')
-        .update({ status: 'paused' })
-        .eq('id', sessionId);
+      await supabase.from('sessions').update({ status: 'paused' }).eq('id', sessionId);
     }
   };
 
@@ -136,14 +126,12 @@ export default function Home() {
 
     if (sessionId) {
       if (messagesRef.current.length > 0) {
-        // Fire-and-forget: trigger post-session pipeline (saves transcript + marks complete)
         fetch('/api/session-end', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
         }).catch((err) => console.error('Session-end pipeline failed:', err));
       } else {
-        // No transcript captured — still mark session complete so it appears in dashboard
         supabase
           .from('sessions')
           .update({ status: 'complete', ended_at: new Date().toISOString() })
@@ -154,25 +142,6 @@ export default function Home() {
 
     setSessionId(null);
     messagesRef.current = [];
-  };
-
-  const handleSendText = (text: string) => {
-    if (!connectionRef.current?.dc || connectionRef.current.dc.readyState !== 'open') return;
-
-    connectionRef.current.dc.send(
-      JSON.stringify({
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [{ type: 'input_text', text }],
-        },
-      })
-    );
-    connectionRef.current.dc.send(JSON.stringify({ type: 'response.create' }));
-
-    // Track in messages ref
-    messagesRef.current = [...messagesRef.current, { role: 'user', text }];
   };
 
   const handleAttach = async (files: FileList) => {
@@ -189,7 +158,6 @@ export default function Home() {
         continue;
       }
 
-      // Notify the AI about the attachment via data channel
       if (connectionRef.current?.dc?.readyState === 'open') {
         const caption = `Пользователь прикрепил файл: ${file.name}`;
         connectionRef.current.dc.send(
@@ -211,57 +179,173 @@ export default function Home() {
   const selectedChapterTitle = chapters.find((c) => c.id === selectedChapterId)?.title_ru;
 
   return (
-    <main className="min-h-screen bg-zinc-950 flex flex-col items-center justify-between relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-950/40 via-zinc-950 to-zinc-950 pointer-events-none" />
+    <main className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
+      {/* Ambient background glow */}
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={{
+          background: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(212,168,83,0.06) 0%, transparent 70%)',
+        }}
+      />
 
-      <div className="relative w-full flex items-center p-4 gap-3">
-        <ChapterSidebar
-          chapters={chapters}
-          completedIds={new Set()}
-          selectedId={selectedChapterId}
-          onSelect={setSelectedChapterId}
-        />
-        {selectedChapterTitle && (
-          <span className="text-white/50 text-sm truncate">{selectedChapterTitle}</span>
-        )}
-      </div>
+      {/* Header */}
+      <header className="relative flex items-center justify-between px-6 pt-8 pb-2">
+        <span
+          className="text-xl font-semibold tracking-wide"
+          style={{ color: 'var(--accent)' }}
+        >
+          Memoir
+        </span>
+        <a
+          href="/family"
+          className="text-sm transition-colors"
+          style={{ color: 'var(--text-muted)' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+        >
+          Семейный архив →
+        </a>
+      </header>
 
-      <div className="relative flex flex-col items-center gap-12">
-        <VoiceOrb state={orbState} onClick={handleOrbClick} />
+      {/* Chapter selector */}
+      <section className="relative px-6 pt-5 pb-2">
+        <p
+          className="text-xs uppercase tracking-widest mb-3"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          Тема разговора
+        </p>
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <ChapterChip
+            label="Свободный разговор"
+            selected={selectedChapterId === null}
+            disabled={isSessionActive}
+            onClick={() => setSelectedChapterId(null)}
+          />
+          {chapters.map((ch) => (
+            <ChapterChip
+              key={ch.id}
+              label={ch.title_ru}
+              selected={selectedChapterId === ch.id}
+              disabled={isSessionActive}
+              onClick={() => setSelectedChapterId(ch.id)}
+            />
+          ))}
+        </div>
+      </section>
 
+      {/* Orb area */}
+      <div className="relative flex-1 flex flex-col items-center justify-center gap-6 py-10">
+        <VoiceOrb state={orbState} onClick={handleOrbClick} disabled={isSessionActive} />
+
+        {/* State label */}
+        <p
+          className="text-sm tracking-wide transition-all duration-300"
+          style={{ color: isSessionActive ? 'var(--accent)' : 'var(--text-muted)' }}
+        >
+          {isSessionActive ? orbLabels[orbState] : orbLabels['idle']}
+        </p>
+
+        {/* Session controls */}
         {isSessionActive && (
-          <div className="flex gap-8">
-            <button
+          <div className="flex items-center gap-5 mt-2">
+            <input
+              type="file"
+              ref={fileRef}
+              className="hidden"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.txt"
+              onChange={(e) => e.target.files && handleAttach(e.target.files)}
+            />
+            <SessionButton
+              icon={<ImagePlus className="w-5 h-5" />}
+              label="Фото"
+              onClick={() => fileRef.current?.click()}
+            />
+            <SessionButton
+              icon={<Pause className="w-5 h-5" />}
+              label="Пауза"
               onClick={handlePause}
-              className="flex flex-col items-center gap-2 text-white/60 hover:text-white transition-colors"
-            >
-              <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-                <Pause className="w-6 h-6" />
-              </div>
-              <span className="text-xs">Пауза</span>
-            </button>
-            <button
+            />
+            <SessionButton
+              icon={<X className="w-5 h-5" />}
+              label="Завершить"
               onClick={handleEnd}
-              className="flex flex-col items-center gap-2 text-white/60 hover:text-white transition-colors"
-            >
-              <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-                <X className="w-6 h-6" />
-              </div>
-              <span className="text-xs">Завершить</span>
-            </button>
+              danger
+            />
           </div>
         )}
-      </div>
 
-      <div className="relative w-full max-w-lg px-4 pb-8">
-        <TextInputBar
-          onSendText={handleSendText}
-          onAttach={handleAttach}
-          isMicActive={isSessionActive}
-          onToggleMic={handleOrbClick}
-          disabled={false}
-        />
+        {/* Selected chapter label during session */}
+        {isSessionActive && selectedChapterTitle && (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Тема: {selectedChapterTitle}
+          </p>
+        )}
       </div>
     </main>
+  );
+}
+
+function ChapterChip({
+  label,
+  selected,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex-shrink-0 px-4 py-2 rounded-full text-sm transition-all duration-200 disabled:cursor-default"
+      style={{
+        background: selected ? 'var(--accent-dim)' : 'rgba(255,255,255,0.04)',
+        color: selected ? 'var(--accent)' : 'var(--text-muted)',
+        border: `1px solid ${selected ? 'var(--accent-border)' : 'var(--border)'}`,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SessionButton({
+  icon,
+  label,
+  onClick,
+  danger,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 transition-opacity hover:opacity-100"
+      style={{ opacity: 0.65 }}
+      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+      onMouseLeave={e => (e.currentTarget.style.opacity = '0.65')}
+    >
+      <div
+        className="w-12 h-12 rounded-full flex items-center justify-center"
+        style={{
+          background: danger ? 'rgba(220,80,60,0.15)' : 'rgba(255,255,255,0.07)',
+          border: `1px solid ${danger ? 'rgba(220,80,60,0.25)' : 'var(--border)'}`,
+          color: danger ? '#e05040' : 'var(--text)',
+        }}
+      >
+        {icon}
+      </div>
+      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </span>
+    </button>
   );
 }
