@@ -47,11 +47,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Fetch chapter titles for tagging
-  const { data: chapters } = await supabaseAdmin
-    .from('chapters')
-    .select('id, title_ru');
+  // Fetch chapter titles for tagging + existing short_titles to avoid repetition
+  const [{ data: chapters }, { data: existingTx }] = await Promise.all([
+    supabaseAdmin.from('chapters').select('id, title_ru'),
+    supabaseAdmin
+      .from('transcripts')
+      .select('short_title')
+      .not('short_title', 'is', null)
+      .neq('id', transcript.id),
+  ]);
   const chapterTitles = chapters?.map((c) => c.title_ru) ?? [];
+  const existingTitles = (existingTx ?? [])
+    .map((t: { short_title: string | null }) => t.short_title)
+    .filter(Boolean) as string[];
 
   // Run GPT-4o polish + tag + summarize + title in parallel
   const [polishRes, tagRes, summaryRes, titleRes] = await Promise.all([
@@ -69,7 +77,7 @@ export async function POST(req: NextRequest) {
     }),
     openai.chat.completions.create({
       model: 'gpt-4o',
-      messages: [{ role: 'user', content: buildTitlePrompt(rawText) }],
+      messages: [{ role: 'user', content: buildTitlePrompt(rawText, existingTitles) }],
     }),
   ]);
 
