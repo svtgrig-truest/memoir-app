@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { HeritageUpload } from '@/components/HeritageUpload';
 import Link from 'next/link';
+import { CheckCircle2, Clock } from 'lucide-react';
 
 export default async function HeritagePage() {
   const { data: docs } = await supabaseAdmin
@@ -11,39 +12,88 @@ export default async function HeritagePage() {
     .order('uploaded_at', { ascending: false });
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white p-6 max-w-2xl mx-auto">
+    <main
+      className="min-h-screen p-6 max-w-2xl mx-auto"
+      style={{ background: 'var(--bg)', color: 'var(--text)' }}
+    >
+      {/* Header */}
       <div className="mb-8">
-        <Link href="/family/dashboard" className="text-white/40 text-sm hover:text-white">
-          ← Воспоминания
+        <Link
+          href="/family/dashboard"
+          className="text-sm transition-colors mb-4 block"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          ← Назад к архиву
         </Link>
-        <h1 className="text-2xl font-bold mt-2">Семейные документы</h1>
-        <p className="text-white/40 text-sm mt-1">
-          Загрузите документы — AI использует их как контекст при интервью
+        <h1 className="text-2xl font-semibold">Семейные документы</h1>
+        <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
+          Загруженные документы помогают AI задавать более точные и личные вопросы
         </p>
       </div>
 
-      <div className="space-y-2 mb-6">
-        {docs?.length === 0 && (
-          <p className="text-white/30 text-sm">Документы ещё не загружены</p>
-        )}
-        {docs?.map((doc) => (
-          <div key={doc.id} className="bg-zinc-900 rounded-xl px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-white/80">{doc.filename}</p>
-              {doc.summary_text && (
-                <p className="text-xs text-white/40 mt-1 line-clamp-2">{doc.summary_text}</p>
-              )}
-            </div>
-            <span className={`text-xs px-2 py-1 rounded-full ml-4 shrink-0 ${
-              doc.summary_text ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-            }`}>
-              {doc.summary_text ? 'Обработан' : 'Ожидание'}
-            </span>
-          </div>
-        ))}
+      {/* Upload */}
+      <div
+        className="rounded-2xl p-5 mb-6"
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+      >
+        <HeritageUpload />
       </div>
 
-      <HeritageUpload />
+      {/* Document list */}
+      {docs && docs.length > 0 && (
+        <div className="space-y-2">
+          <p
+            className="text-xs uppercase tracking-widest mb-3"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            Загруженные документы
+          </p>
+          {docs.map((doc) => (
+            <div
+              key={doc.id}
+              className="rounded-xl px-4 py-3.5 flex items-start justify-between gap-4"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm truncate" style={{ color: 'var(--text)' }}>
+                  {doc.filename}
+                </p>
+                {doc.summary_text && (
+                  <p
+                    className="text-xs mt-1 line-clamp-2 leading-relaxed"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    {doc.summary_text}
+                  </p>
+                )}
+              </div>
+              <div className="flex-shrink-0 flex items-center gap-1.5">
+                {doc.summary_text ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
+                    <span className="text-xs" style={{ color: 'var(--accent)' }}>
+                      Готов
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      Обработка
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {docs?.length === 0 && (
+        <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>
+          Документы ещё не загружены
+        </p>
+      )}
     </main>
   );
 }
