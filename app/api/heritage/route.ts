@@ -20,36 +20,38 @@ async function summariseBuffer(
       return res.choices[0].message.content ?? null;
     }
 
-    if (mimeType === 'application/pdf') {
-      const base64 = Buffer.from(buffer).toString('base64');
-      const res = await (openai as any).responses.create({
-        model: 'gpt-4o',
-        input: [
-          {
-            role: 'user',
-            content: [
-              { type: 'input_file', filename, file_data: `data:application/pdf;base64,${base64}` },
-              { type: 'input_text', text: SUMMARY_PROMPT },
-            ],
-          },
-        ],
-      });
-      return (res as any).output_text ?? null;
-    }
-
+    // PDF and DOCX — use OpenAI Responses API (native file parsing)
     if (
+      mimeType === 'application/pdf' ||
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       mimeType === 'application/msword'
     ) {
-      const mammoth = await import('mammoth');
-      const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
-      const text = result.value;
-      if (!text.trim()) return null;
-      const res = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: `${SUMMARY_PROMPT}\n\n${text.substring(0, 8000)}` }],
+      const base64 = Buffer.from(buffer).toString('base64');
+      const res = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          input: [
+            {
+              role: 'user',
+              content: [
+                { type: 'input_file', filename, file_data: `data:${mimeType};base64,${base64}` },
+                { type: 'input_text', text: SUMMARY_PROMPT },
+              ],
+            },
+          ],
+        }),
       });
-      return res.choices[0].message.content ?? null;
+      if (!res.ok) {
+        console.error('Responses API error:', res.status, await res.text());
+        return null;
+      }
+      const data = await res.json() as { output?: { content?: { text?: string }[] }[] };
+      return data.output?.[0]?.content?.[0]?.text ?? null;
     }
   } catch (err) {
     console.error('Heritage summarise failed:', err);
