@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { HeritageUpload } from '@/components/HeritageUpload';
+import { HeritageDocCard } from '@/components/HeritageDocCard';
 import Link from 'next/link';
-import { CheckCircle2, Clock } from 'lucide-react';
 
 export default async function HeritagePage() {
   const { data: docs } = await supabaseAdmin
@@ -27,7 +27,8 @@ export default async function HeritagePage() {
         </Link>
         <h1 className="text-2xl font-semibold">Семейные документы</h1>
         <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
-          Загруженные документы помогают AI задавать более точные и личные вопросы
+          Загруженные документы помогают AI задавать более точные и личные вопросы.
+          Поддерживаются PDF, DOCX и TXT.
         </p>
       </div>
 
@@ -49,42 +50,7 @@ export default async function HeritagePage() {
             Загруженные документы
           </p>
           {docs.map((doc) => (
-            <div
-              key={doc.id}
-              className="rounded-xl px-4 py-3.5 flex items-start justify-between gap-4"
-              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm truncate" style={{ color: 'var(--text)' }}>
-                  {doc.filename}
-                </p>
-                {doc.summary_text && (
-                  <p
-                    className="text-xs mt-1 line-clamp-2 leading-relaxed"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    {doc.summary_text}
-                  </p>
-                )}
-              </div>
-              <div className="flex-shrink-0 flex items-center gap-1.5">
-                {doc.summary_text ? (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
-                    <span className="text-xs" style={{ color: 'var(--accent)' }}>
-                      Готов
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Clock className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      Обработка
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
+            <HeritageDocCard key={doc.id} doc={doc} />
           ))}
         </div>
       )}
