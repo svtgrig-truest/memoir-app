@@ -5,46 +5,92 @@ import { OrbState } from '@/types';
 interface Props {
   state: OrbState;
   onClick: () => void;
+  disabled?: boolean;
 }
 
 const orbVariants: Record<OrbState, TargetAndTransition> = {
   idle: {
     scale: [1, 1.03, 1],
-    opacity: [0.7, 0.85, 0.7],
-    transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
+    opacity: [0.75, 0.9, 0.75],
+    transition: { duration: 3.5, repeat: Infinity, ease: 'easeInOut' },
   },
   listening: {
-    scale: [1, 1.12, 0.97, 1.08, 1],
-    opacity: [0.8, 1, 0.9, 1, 0.8],
-    transition: { duration: 0.8, repeat: Infinity },
+    scale: [1, 1.14, 0.97, 1.1, 1],
+    opacity: [0.85, 1, 0.9, 1, 0.85],
+    transition: { duration: 0.75, repeat: Infinity },
   },
   speaking: {
-    scale: [1, 1.06, 1.02, 1.08, 1],
+    scale: [1, 1.07, 1.02, 1.09, 1],
     opacity: [0.9, 1, 0.95, 1, 0.9],
-    transition: { duration: 0.5, repeat: Infinity },
+    transition: { duration: 0.45, repeat: Infinity },
   },
   thinking: {
     rotate: [0, 360],
-    transition: { duration: 2, repeat: Infinity, ease: 'linear' },
+    transition: { duration: 2.5, repeat: Infinity, ease: 'linear' },
   },
 };
 
-export function VoiceOrb({ state, onClick }: Props) {
-  // TODO Task 4: update aria-label per state ("Идёт запись" when listening, etc.)
+const glowVariants: Record<OrbState, TargetAndTransition> = {
+  idle: {
+    scale: [1, 1.05, 1],
+    opacity: [0.15, 0.25, 0.15],
+    transition: { duration: 3.5, repeat: Infinity, ease: 'easeInOut' },
+  },
+  listening: {
+    scale: [1, 1.2, 1],
+    opacity: [0.2, 0.45, 0.2],
+    transition: { duration: 0.75, repeat: Infinity },
+  },
+  speaking: {
+    scale: [1, 1.15, 1],
+    opacity: [0.25, 0.5, 0.25],
+    transition: { duration: 0.45, repeat: Infinity },
+  },
+  thinking: {
+    opacity: [0.2, 0.35, 0.2],
+    transition: { duration: 1.2, repeat: Infinity, ease: 'easeInOut' },
+  },
+};
+
+const ariaLabels: Record<OrbState, string> = {
+  idle: 'Начать разговор',
+  listening: 'Идёт запись',
+  speaking: 'AI отвечает',
+  thinking: 'AI думает',
+};
+
+export function VoiceOrb({ state, onClick, disabled }: Props) {
   return (
     <button
       onClick={onClick}
-      className="relative flex items-center justify-center w-48 h-48 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-      aria-label="Начать разговор"
+      disabled={disabled}
+      className="relative flex items-center justify-center w-52 h-52 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a853]/50 disabled:cursor-default"
+      aria-label={ariaLabels[state]}
     >
-      {/* Outer glow ring */}
+      {/* Outer ambient glow */}
       <motion.div
-        className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-400 to-purple-600 opacity-20"
-        animate={orbVariants.idle}
+        className="absolute inset-[-20px] rounded-full"
+        style={{
+          background: 'radial-gradient(circle, rgba(212,168,83,0.18) 0%, transparent 70%)',
+        }}
+        animate={glowVariants[state]}
+      />
+      {/* Mid ring */}
+      <motion.div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: 'radial-gradient(circle, rgba(212,168,83,0.08) 0%, transparent 75%)',
+          border: '1px solid rgba(212,168,83,0.15)',
+        }}
+        animate={glowVariants[state]}
       />
       {/* Core orb */}
       <motion.div
-        className="w-36 h-36 rounded-full bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 shadow-2xl shadow-blue-500/50"
+        className="w-40 h-40 rounded-full shadow-2xl"
+        style={{
+          background: 'radial-gradient(circle at 35% 35%, #e8c06a, #c9893a, #8b4e1a)',
+          boxShadow: '0 0 60px rgba(212,168,83,0.3), 0 0 120px rgba(180,120,40,0.15)',
+        }}
         animate={orbVariants[state]}
       />
     </button>
