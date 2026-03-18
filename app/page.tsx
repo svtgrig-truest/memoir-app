@@ -1,8 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { VoiceOrb } from '@/components/VoiceOrb';
-import { supabase } from '@/lib/supabase/client';
-import { connectToRealtime, buildSystemPrompt, RealtimeConnection, TurnMessage } from '@/lib/realtime';
+import { connectToRealtime, RealtimeConnection, TurnMessage } from '@/lib/realtime';
 import { Chapter, OrbState } from '@/types';
 import { Pause, X, ImagePlus, CheckCircle2 } from 'lucide-react';
 
@@ -28,14 +27,10 @@ export default function Home() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('chapters')
-      .select('*')
-      .order('display_order')
-      .then(({ data, error }) => {
-        if (error) console.error('Failed to load chapters:', error.message);
-        if (data) setChapters(data);
-      });
+    fetch('/api/chapters')
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setChapters(data); })
+      .catch((err) => console.error('Failed to load chapters:', err));
   }, []);
 
   const showToast = (msg: string) => {
@@ -51,25 +46,6 @@ export default function Home() {
     setPhotoCount(0);
 
     try {
-      const [{ data: docs }, { data: transcripts }] = await Promise.all([
-        supabase.from('heritage_docs').select('summary_text'),
-        supabase
-          .from('transcripts')
-          .select('session_summary')
-          .not('session_summary', 'is', null)
-          .order('created_at', { ascending: false })
-          .limit(3),
-      ]);
-
-      const heritageSummary =
-        docs?.map((d) => d.summary_text).filter(Boolean).join('\n') ?? null;
-      const sessionSummaries =
-        transcripts?.map((t) => t.session_summary as string).filter(Boolean) ?? [];
-      const chapterTitle =
-        chapters.find((c) => c.id === selectedChapterId)?.title_ru ?? null;
-
-      const systemPrompt = buildSystemPrompt({ chapterTitle, heritageSummary, sessionSummaries });
-
       const tokenRes = await fetch('/api/session-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -77,13 +53,13 @@ export default function Home() {
       });
 
       if (!tokenRes.ok) throw new Error('Failed to get session token');
-      const { client_secret, session_id } = await tokenRes.json();
+      const { client_secret, session_id, system_prompt } = await tokenRes.json();
       setSessionId(session_id);
       messagesRef.current = [];
 
       const conn = await connectToRealtime(
         client_secret.value,
-        systemPrompt,
+        system_prompt,
         (event) => {
           if (event.type === 'input_audio_buffer.speech_started') setOrbState('listening');
           if (event.type === 'response.created') setOrbState('thinking');
@@ -124,7 +100,11 @@ export default function Home() {
     setIsSessionActive(false);
 
     if (sessionId) {
-      await supabase.from('sessions').update({ status: 'paused' }).eq('id', sessionId);
+      fetch('/api/session-pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      }).catch((err) => console.error('Failed to pause session:', err));
     }
   };
 
@@ -135,19 +115,11 @@ export default function Home() {
     setIsSessionActive(false);
 
     if (sessionId) {
-      if (messagesRef.current.length > 0) {
-        fetch('/api/session-end', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
-        }).catch((err) => console.error('Session-end pipeline failed:', err));
-      } else {
-        supabase
-          .from('sessions')
-          .update({ status: 'complete', ended_at: new Date().toISOString() })
-          .eq('id', sessionId)
-          .then(({ error }) => { if (error) console.error('Failed to close session:', error.message); });
-      }
+      fetch('/api/session-end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
+      }).catch((err) => console.error('Session-end pipeline failed:', err));
     }
 
     setSessionId(null);
