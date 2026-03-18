@@ -5,7 +5,7 @@ import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { SessionPhotos } from '@/components/SessionPhotos';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { Download, FileText, BookOpen } from 'lucide-react';
+import { Download, FileText, BookOpen, Mic } from 'lucide-react';
 
 export default async function ArchiveSessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,7 +13,7 @@ export default async function ArchiveSessionPage({ params }: { params: Promise<{
   const [{ data: session }, { data: photos }] = await Promise.all([
     supabaseAdmin
       .from('sessions')
-      .select('*, transcripts(*), chapters(title_ru)')
+      .select('*, transcripts(*), chapters(id, title_ru)')
       .eq('id', id)
       .single(),
     supabaseAdmin
@@ -30,6 +30,8 @@ export default async function ArchiveSessionPage({ params }: { params: Promise<{
   const transcript: Record<string, unknown> | null =
     Array.isArray(txRaw) ? (txRaw[0] ?? null) : (txRaw as Record<string, unknown> | null) ?? null;
   const chapter = sessionData.chapters as Record<string, unknown> | null;
+  const chapterId = chapter?.id as string | null ?? null;
+  const chapterTitle = chapter?.title_ru as string | null ?? null;
 
   const dateStr = new Date(sessionData.started_at as string).toLocaleDateString('ru-RU', {
     day: 'numeric',
@@ -45,13 +47,31 @@ export default async function ArchiveSessionPage({ params }: { params: Promise<{
       style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
       {/* Navigation */}
-      <Link
-        href="/archive"
-        className="inline-flex items-center gap-1.5 text-sm mb-6 transition-colors"
-        style={{ color: 'var(--text-muted)' }}
-      >
-        ← Назад к записям
-      </Link>
+      <div className="flex items-center justify-between mb-6">
+        <Link
+          href={chapterId ? `/archive/chapter/${chapterId}` : '/archive'}
+          className="inline-flex items-center gap-1.5 text-sm transition-colors"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          ← {chapterTitle ? chapterTitle : 'Назад к записям'}
+        </Link>
+
+        {/* Continue conversation button */}
+        {chapterId && (
+          <a
+            href={`/?chapter=${chapterId}`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+            style={{
+              background: 'var(--accent-dim)',
+              color: 'var(--accent)',
+              border: '1px solid var(--accent-border)',
+            }}
+          >
+            <Mic className="w-3.5 h-3.5" />
+            Продолжить разговор
+          </a>
+        )}
+      </div>
 
       {/* Session header */}
       <div className="flex items-start justify-between mb-8 gap-4">
