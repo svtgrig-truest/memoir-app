@@ -119,7 +119,7 @@ export default async function ChapterArchivePage({ params }: { params: Promise<{
                         border: '1px solid var(--accent-border)',
                       }}
                     >
-                      Последний разговор
+                      Мы остановились здесь
                     </span>
                   </div>
                 )}
