@@ -96,7 +96,7 @@ export default async function ArchivePage() {
                 style={{ borderBottom: '1px solid var(--border)' }}
               >
                 <BookOpen className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--accent)' }} />
-                <h2 className="text-sm font-medium">{chapter.title_ru}</h2>
+                <h2 className="text-base font-medium">{chapter.title_ru}</h2>
                 <span
                   className="ml-auto text-xs px-2 py-0.5 rounded-full"
                   style={{
@@ -113,21 +113,21 @@ export default async function ArchivePage() {
                   <Link
                     key={session.id}
                     href={`/archive/session/${session.id}`}
-                    className="flex items-center justify-between px-5 py-3.5 transition-colors group"
+                    className="flex items-center justify-between px-5 py-4 transition-colors group"
                     style={{ color: 'var(--text-muted)' }}
                   >
                     <div>
                       {getShortTitle(session) && (
                         <p
-                          className="text-sm font-medium mb-0.5 group-hover:text-[var(--text)] transition-colors"
+                          className="text-base font-medium mb-1 group-hover:text-[var(--text)] transition-colors"
                           style={{ color: 'var(--text)' }}
                         >
                           {getShortTitle(session)}
                         </p>
                       )}
-                      <p className="text-xs">{formatDateTime(session.started_at)}</p>
+                      <p className="text-sm">{formatDateTime(session.started_at)}</p>
                     </div>
-                    <span className="text-xs flex-shrink-0 ml-4">→</span>
+                    <span className="text-sm flex-shrink-0 ml-4">→</span>
                   </Link>
                 ))}
               </div>
@@ -146,7 +146,7 @@ export default async function ArchivePage() {
               style={{ borderBottom: '1px solid var(--border)' }}
             >
               <BookOpen className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
-              <h2 className="text-sm font-medium">Свободные разговоры</h2>
+              <h2 className="text-base font-medium">Свободные разговоры</h2>
               <span
                 className="ml-auto text-xs px-2 py-0.5 rounded-full"
                 style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}
@@ -159,21 +159,21 @@ export default async function ArchivePage() {
                 <Link
                   key={session.id}
                   href={`/archive/session/${session.id}`}
-                  className="flex items-center justify-between px-5 py-3.5 transition-colors group"
+                  className="flex items-center justify-between px-5 py-4 transition-colors group"
                   style={{ color: 'var(--text-muted)' }}
                 >
                   <div>
                     {getShortTitle(session) && (
                       <p
-                        className="text-sm font-medium mb-0.5 group-hover:text-[var(--text)] transition-colors"
+                        className="text-base font-medium mb-1 group-hover:text-[var(--text)] transition-colors"
                         style={{ color: 'var(--text)' }}
                       >
                         {getShortTitle(session)}
                       </p>
                     )}
-                    <p className="text-xs">{formatDateTime(session.started_at)}</p>
+                    <p className="text-sm">{formatDateTime(session.started_at)}</p>
                   </div>
-                  <span className="text-xs flex-shrink-0 ml-4">→</span>
+                  <span className="text-sm flex-shrink-0 ml-4">→</span>
                 </Link>
               ))}
             </div>
