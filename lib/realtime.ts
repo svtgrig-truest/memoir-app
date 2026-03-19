@@ -100,8 +100,13 @@ export async function connectToRealtime(
   micSource.connect(dest);
 
   const recChunks: BlobPart[] = [];
-  const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg']
-    .find((m) => (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m))) ?? '';
+  // Ordered by preference; mp4/aac is the only option on Safari/iOS
+  const mimeType = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4',
+  ].find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) ?? '';
   const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : {});
   recorder.ondataavailable = (ev) => { if (ev.data.size > 0) recChunks.push(ev.data); };
   recorder.start(2000); // save a chunk every 2 s so data isn't lost on crash
@@ -109,11 +114,13 @@ export async function connectToRealtime(
   const stopRecording = (): Promise<Blob> =>
     new Promise((resolve) => {
       if (recorder.state === 'inactive') {
-        resolve(new Blob(recChunks, { type: mimeType || 'audio/webm' }));
+        resolve(new Blob(recChunks, { type: recorder.mimeType || mimeType || 'audio/webm' }));
         return;
       }
       recorder.onstop = () => {
-        resolve(new Blob(recChunks, { type: mimeType || 'audio/webm' }));
+        // Use recorder.mimeType (browser-resolved) rather than the requested mimeType string
+        const resolvedType = recorder.mimeType || mimeType || 'audio/webm';
+        resolve(new Blob(recChunks, { type: resolvedType }));
         audioCtx.close().catch(() => {});
       };
       recorder.stop();
