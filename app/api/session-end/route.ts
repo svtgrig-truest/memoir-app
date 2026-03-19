@@ -1,4 +1,4 @@
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
@@ -62,55 +62,65 @@ export async function POST(req: NextRequest) {
     .filter(Boolean) as string[];
 
   // Run GPT-4o polish + tag + summarize + title in parallel
-  const [polishRes, tagRes, summaryRes, titleRes] = await Promise.all([
-    openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: buildPolishPrompt(rawText) }],
-    }),
-    openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: buildTagPrompt(rawText, chapterTitles) }],
-    }),
-    openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: buildSummaryPrompt(rawText) }],
-    }),
-    openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: buildTitlePrompt(rawText, existingTitles) }],
-    }),
-  ]);
+  // Wrapped in try/catch — raw_text is already saved, so data is never lost
+  let polishedText = '';
+  let sessionSummary = '';
+  let shortTitle: string | null = null;
+  let matchedChapterId: string | undefined;
 
-  const polishedText = polishRes.choices[0].message.content ?? '';
-  const taggedTitle = tagRes.choices[0].message.content?.trim() ?? '';
-  const sessionSummary = summaryRes.choices[0].message.content ?? '';
-  const shortTitle = titleRes.choices[0].message.content?.trim() ?? '';
+  try {
+    const [polishRes, tagRes, summaryRes, titleRes] = await Promise.all([
+      openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: buildPolishPrompt(rawText) }],
+      }),
+      openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: buildTagPrompt(rawText, chapterTitles) }],
+      }),
+      openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: buildSummaryPrompt(rawText) }],
+      }),
+      openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: buildTitlePrompt(rawText, existingTitles) }],
+      }),
+    ]);
 
-  // Match tagged title back to a chapter ID
-  const matchedChapter = chapters?.find(
-    (c) => c.title_ru.toLowerCase() === taggedTitle.toLowerCase()
-  );
+    polishedText = polishRes.choices[0].message.content ?? '';
+    const taggedTitle = tagRes.choices[0].message.content?.trim() ?? '';
+    sessionSummary = summaryRes.choices[0].message.content ?? '';
+    shortTitle = titleRes.choices[0].message.content?.trim() || null;
 
-  // Update transcript with polished text, summary and short title
-  await supabaseAdmin
-    .from('transcripts')
-    .update({
-      polished_text: polishedText,
-      session_summary: sessionSummary,
-      short_title: shortTitle || null,
-      polished_at: new Date().toISOString(),
-    })
-    .eq('id', transcript.id);
+    const matchedChapter = chapters?.find(
+      (c) => c.title_ru.toLowerCase() === taggedTitle.toLowerCase()
+    );
+    matchedChapterId = matchedChapter?.id;
 
-  // Mark session complete and assign chapter if matched
+    await supabaseAdmin
+      .from('transcripts')
+      .update({
+        polished_text: polishedText,
+        session_summary: sessionSummary,
+        short_title: shortTitle,
+        polished_at: new Date().toISOString(),
+      })
+      .eq('id', transcript.id);
+  } catch (pipelineErr) {
+    console.error('Pipeline failed — raw transcript saved, polished_text=null:', pipelineErr);
+    // Transcript remains with raw_text only; can be retried via /api/transcript/reprocess
+  }
+
+  // Always mark session complete regardless of pipeline outcome
   await supabaseAdmin
     .from('sessions')
     .update({
       status: 'complete',
       ended_at: new Date().toISOString(),
-      ...(matchedChapter ? { chapter_id: matchedChapter.id } : {}),
+      ...(matchedChapterId ? { chapter_id: matchedChapterId } : {}),
     })
     .eq('id', session_id);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, polished: !!polishedText });
 }
