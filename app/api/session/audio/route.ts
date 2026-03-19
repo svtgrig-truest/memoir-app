@@ -4,9 +4,16 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 const BUCKET = 'recordings';
 
 async function ensureBucket() {
-  const { data: buckets } = await supabaseAdmin.storage.listBuckets();
-  if (!buckets?.some((b) => b.name === BUCKET)) {
-    await supabaseAdmin.storage.createBucket(BUCKET, { public: false });
+  try {
+    const { data: buckets } = await supabaseAdmin.storage.listBuckets();
+    if (!buckets?.some((b) => b.name === BUCKET)) {
+      const { error } = await supabaseAdmin.storage.createBucket(BUCKET, { public: false });
+      if (error && !error.message.includes('already exists')) {
+        console.error('Bucket creation failed:', error.message);
+      }
+    }
+  } catch (e) {
+    console.error('ensureBucket error:', e);
   }
 }
 
@@ -36,13 +43,14 @@ export async function POST(req: NextRequest) {
 
   await ensureBucket();
 
-  const ext = audio.type.includes('ogg') ? 'ogg' : audio.type.includes('mp4') ? 'mp4' : 'webm';
+  const ct = audio.type || 'audio/webm';
+  const ext = ct.includes('ogg') ? 'ogg' : ct.includes('mp4') ? 'mp4' : 'webm';
   const buffer = await audio.arrayBuffer();
 
   const { error } = await supabaseAdmin.storage
     .from(BUCKET)
     .upload(`${sessionId}.${ext}`, buffer, {
-      contentType: audio.type || 'audio/webm',
+      contentType: ct,
       upsert: true,
     });
 
