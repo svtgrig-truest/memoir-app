@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { supabaseAdmin } from '@/lib/supabase/server';
 import Link from 'next/link';
-import { BookOpen, FileText } from 'lucide-react';
+import { BookOpen, BookText, FileText } from 'lucide-react';
 
 interface TranscriptMeta {
   id: string;
@@ -98,6 +98,18 @@ export default async function Dashboard() {
         >
           <FileText className="w-4 h-4" />
           Документы
+        </Link>
+        <Link
+          href="/family/dashboard/book"
+          className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl transition-all"
+          style={{
+            color: 'var(--text-muted)',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <BookText className="w-4 h-4" />
+          Вся книга
         </Link>
       </div>
 
