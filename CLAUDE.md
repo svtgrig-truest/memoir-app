@@ -1,115 +1,123 @@
 # CLAUDE.md — memoir-app
 
-## О проекте
+## Project overview
 
-Голосовой мемуарный ассистент. Пожилой человек (Александр Григорьевич) разговаривает с AI голосом; система транскрибирует беседы и публикует в семейный архив.
+A voice-first memoir assistant. An elderly subject (Alexander Grigoryevich) speaks with an AI interviewer in Russian; the system transcribes sessions and publishes them to a family archive.
 
 - **Production:** https://memoir-app-lemon.vercel.app
-- **Деплой:** Vercel, auto-deploy из ветки `main`
-- **Репозиторий:** `svtgrig-truest/memoir-app`
+- **Deploy:** Vercel, auto-deploy from `main` branch
+- **Repository:** `svtgrig-truest/memoir-app`
 
 ---
 
-## Стек
+## Stack
 
 - Next.js 16 (App Router, Turbopack), React 19
 - Tailwind CSS v4, Framer Motion
-- OpenAI Realtime API (WebRTC) — голос в реальном времени
-- GPT-4o — полировка транскриптов, резюме, заголовки
-- GPT-4o-mini — извлечение текста из семейных документов (меньше TPM ограничений)
-- Supabase (PostgreSQL + RLS + Storage) — БД и аутентификация
-- jsPDF — PDF-экспорт
+- OpenAI Realtime API (WebRTC) — real-time voice
+- GPT-4o — transcript polishing, summaries, titles
+- GPT-4o-mini — heritage document text extraction
+- Supabase (PostgreSQL + RLS + Storage) — database and auth
+- jsPDF — PDF export
 
 ---
 
-## Ключевые файлы
+## Key files
 
-| Файл | Назначение |
+| File | Purpose |
 |---|---|
-| `app/page.tsx` | Главная: орб, чипы тем, autostart-логика |
-| `lib/realtime.ts` | WebRTC подключение, `buildSystemPrompt`, VAD, таймер тишины |
+| `app/page.tsx` | Main page: orb, chapter chips, autostart logic |
+| `lib/realtime.ts` | WebRTC connection, `buildSystemPrompt`, VAD, barge-in guard |
 | `lib/pipeline.ts` | `buildPolishPrompt`, `buildSummaryPrompt`, `buildTitlePrompt(rawText, existingTitles)`, `countUserWords` |
-| `app/api/session-token/route.ts` | Ephemeral token + system prompt; читает heritage docs, извлекает текст через Responses API, кеширует |
-| `app/api/session-end/route.ts` | Завершение сессии + pipeline (мин. 8 слов); передаёт existing titles в buildTitlePrompt |
-| `app/api/heritage/route.ts` | POST: загрузить файл в Storage, сохранить запись (без GPT) |
-| `app/api/heritage/reprocess/route.ts` | POST: перечитать файл через Responses API |
-| `components/HeritageDocCard.tsx` | Карточка документа: только имя файла + ссылка |
-| `components/TitleEditor.tsx` | Инлайн-редактор заголовка записи |
-| `app/family/dashboard/heritage/page.tsx` | Страница семейных документов |
+| `app/api/session-token/route.ts` | Ephemeral token + system prompt; reads cached `summary_text` from heritage docs |
+| `app/api/session-end/route.ts` | End session + pipeline (min 8 words); passes existing titles to `buildTitlePrompt`; try/catch around GPT calls; maxDuration 120 |
+| `app/api/heritage/route.ts` | POST: upload file to Storage, save record (no GPT on upload) |
+| `app/api/heritage/reprocess/route.ts` | POST: download file from Supabase, upload to OpenAI Files API, extract facts, cache in `summary_text` |
+| `app/api/transcript/reprocess/route.ts` | POST: retry pipeline for a transcript that has `raw_text` but no `polished_text` |
+| `components/HeritageDocCard.tsx` | Document card: filename, link, AI-ready status badge, Prepare/Update button |
+| `components/RetryPolishButton.tsx` | Retry button on session page when `polished_text` is null |
+| `components/TitleEditor.tsx` | Inline session title editor |
 
 ---
 
-## Правила продукта (не менять без явного указания)
+## Product rules (do not change without explicit instruction)
 
-- AI обращается только «Александр Григорьевич» или «вы» — никаких «дорогой», «голубчик»
-- Имя «Александр Григорьевич» — не чаще одного раза в несколько реплик
-- Все промпты (`buildPolishPrompt`, `buildSummaryPrompt`, `buildTitlePrompt`) содержат явный запрет на добавление деталей, не упомянутых пользователем
-- Если пользователь сказал **менее 8 слов** за сессию — транскрипт не создаётся
-- Тема `free` исключена везде
-- `?autostart=1` убирается через `window.history.replaceState` сразу после запуска
+- AI addresses the subject only as "Александр Григорьевич" or "вы" — no "дорогой", "голубчик" or similar
+- "Александр Григорьевич" used at most once every few exchanges
+- All prompts (`buildPolishPrompt`, `buildSummaryPrompt`, `buildTitlePrompt`) contain explicit instructions not to add details not mentioned by the user
+- If the user said **fewer than 8 words** in a session — no transcript is created, session silently marked complete
+- `free` chapter theme is excluded everywhere
+- `?autostart=1` removed via `window.history.replaceState` immediately after session starts
+- AI asks exactly **one question** per turn, waits for a response, never fills silence
+- Each next question must be connected to the previous answer (deepen, contrast, or pick up a detail) — no topic jumps without a bridge
 
 ---
 
-## Heritage-документы
+## Heritage documents
 
-**Загрузка:** `POST /api/heritage` → сохраняет файл в `supabase.storage('Media')/heritage/` + запись в `heritage_docs` с `summary_text = null`. Никакой обработки GPT при загрузке.
+**Upload:** `POST /api/heritage` → saves file to `supabase.storage('Media')/heritage/` + creates a `heritage_docs` record with `summary_text = null`. No GPT processing at upload time.
 
-**Использование в сессии:** `session-token/route.ts` при каждом старте:
-1. Читает `heritage_docs` (id, file_url, mime_type, filename, summary_text)
-2. Если `summary_text` есть → использует кеш
-3. Если нет → вызывает OpenAI Responses API с `file_url` + промпт извлечения фактов → кеширует в `summary_text`
+**Preparation (one-time per document):** `POST /api/heritage/reprocess` →
+1. Downloads file from Supabase Storage via admin client
+2. Uploads to OpenAI Files API using `toFile` (works for both DOCX and PDF)
+3. Calls Responses API with `file_id` + extraction prompt
+4. Caches result in `heritage_docs.summary_text`
 
-**Промпт извлечения:** «Это частный семейный архив. Перечисли все биографические факты: имена, даты, события, места, семейные связи, должности, награды.» — формулировка как "фактический список", а не "пересказ/цитирование" (во избежание отказа GPT по авторскому праву).
+**Extraction prompt framing:** "Это частный семейный архив. Составь подробный биографический указатель..." — framed as a factual index, not a transcription/paraphrase, to avoid copyright refusal from GPT.
 
-**Страница:** только имя файла + ссылка, без превью текста.
+**In-session usage:** `session-token` simply reads cached `summary_text` values — no extraction at session start.
+
+**UI:** `HeritageDocCard` shows filename + link, status badge ("Готов для AI" / "Не обработан"), and a Prepare/Update button.
 
 ---
 
 ## Title generation
 
-`buildTitlePrompt(rawText, existingTitles)` принимает массив уже существующих заголовков.
+`buildTitlePrompt(rawText, existingTitles[])` takes an array of all existing `short_title` values.
 
-Правила в промпте:
-- Конкретность (место/человек/событие, не общая тема)
-- Только первое слово с заглавной буквы (кроме имён собственных)
-- Без кавычек, без эпитетов («яркий», «незабываемый»)
-- 3–6 слов
-- Список `existingTitles` передаётся как «не повторяй темы из этих названий»
+Prompt rules:
+- Specific (place/person/event, not a generic theme)
+- Only the first word capitalised (except proper nouns)
+- No quotes, no epithets ("яркий", "незабываемый")
+- 3–6 words
+- `existingTitles` passed as "do not repeat themes from these titles"
 
-`session-end` подгружает все существующие `short_title` из `transcripts` (кроме текущего) и передаёт в промпт.
-
----
-
-## VAD и поведение голоса
-
-- VAD threshold: `0.6`, silence duration: `1200 ms`
-- Таймер тишины 8 сек → ассистент задаёт следующий вопрос
+`session-end` fetches all existing `short_title` values from `transcripts` (excluding the current one) and passes them to the prompt.
 
 ---
 
-## База данных (Supabase)
+## VAD and voice behaviour
 
-| Таблица | Поля |
+- Server-side VAD: threshold `0.6`, silence duration `1200 ms`
+- `create_response: true` — server auto-creates a response when user stops speaking
+- Barge-in: client sends `response.cancel` only when `isAIResponding === true` (tracked via `response.created` / `response.done` events) — prevents cancelling auto-responses during silence
+- No silence follow-up timer — AI asks one question and waits indefinitely
+
+---
+
+## Database (Supabase)
+
+| Table | Fields |
 |---|---|
 | `chapters` | `id`, `title_ru`, `theme`, `display_order` |
 | `sessions` | `id`, `chapter_id`, `started_at`, `ended_at`, `status` |
 | `transcripts` | `id`, `session_id`, `raw_text`, `polished_text`, `session_summary`, `short_title`, `polished_at` |
 | `heritage_docs` | `id`, `filename`, `file_url`, `mime_type`, `summary_text`, `uploaded_at` |
 
-- RLS включён на всех таблицах
-- API-роуты используют `supabaseAdmin` (service role key) — никогда anon key в server-side коде
+- RLS enabled on all tables
+- API routes always use `supabaseAdmin` (service role key) — never the anon key in server-side code
 
 ---
 
-## Типичные TypeScript-ловушки в этом проекте
+## TypeScript gotchas in this project
 
-- `openai.files.delete()` — не `.del()` (было в v4, убрали в v6)
-- `supabaseBuilder.then(() => {}, () => {})` — не `.catch()` (Supabase реализует `PromiseLike`, не `Promise`)
-- `middleware.ts` — удалён, ломал Turbopack build в Next.js 16
+- `openai.files.delete()` — not `.del()` (was in v4, removed in v6)
+- `supabaseBuilder.then(() => {}, () => {})` — not `.catch()` (Supabase implements `PromiseLike`, not `Promise`)
+- No `middleware.ts` — breaks Turbopack build in Next.js 16
 
 ---
 
-## Переменные окружения
+## Environment variables
 
 ```
 NEXT_PUBLIC_SUPABASE_URL
