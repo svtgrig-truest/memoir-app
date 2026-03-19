@@ -29,6 +29,11 @@ function getShortTitle(session: SessionRow): string | null {
   const item = Array.isArray(t) ? t[0] : t;
   return item?.short_title ?? null;
 }
+function hasTranscript(session: SessionRow): boolean {
+  const t = session.transcripts;
+  if (!t) return false;
+  return Array.isArray(t) ? t.length > 0 : true;
+}
 
 function formatDateTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('ru-RU', {
@@ -56,7 +61,7 @@ export default async function ArchivePage() {
 
   const totalSessions =
     (chapters?.reduce((sum, ch) => sum + (ch.sessions?.filter(s => s.status === 'complete').length ?? 0), 0) ?? 0) +
-    (untaggedSessions?.length ?? 0);
+    (untaggedSessions?.filter(hasTranscript).length ?? 0);
 
   return (
     <main
@@ -83,7 +88,7 @@ export default async function ArchivePage() {
       {/* Chapter sections */}
       <div className="space-y-3">
         {chapters?.map((chapter) => {
-          const completedSessions = chapter.sessions?.filter(s => s.status === 'complete') ?? [];
+          const completedSessions = chapter.sessions?.filter(s => s.status === 'complete' && hasTranscript(s)) ?? [];
           if (completedSessions.length === 0) return null;
 
           return (
