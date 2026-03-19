@@ -150,27 +150,36 @@ export default function Home() {
     messagesRef.current = [];
     setPhotoCount(0);
 
-    if (!conn || !sid) { conn?.disconnect(); return; }
+    // ── 1. Start recording stop (non-blocking, may be a no-op if recording failed) ──
+    let blobPromise: Promise<Blob> | null = null;
+    try {
+      if (conn) blobPromise = conn.stopRecording();
+    } catch { /* recording failure must never block session-end */ }
 
-    // Stop recording before closing streams, then upload in background
-    const blobPromise = conn.stopRecording();
-    conn.disconnect();
+    // ── 2. Always disconnect WebRTC ──
+    try { conn?.disconnect(); } catch { /* ignore */ }
 
-    fetch('/api/session-end', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sid, messages: msgs }),
-    }).catch((err) => console.error('Session-end pipeline failed:', err));
+    // ── 3. Critical: save transcript pipeline — always runs ──
+    if (sid) {
+      fetch('/api/session-end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sid, messages: msgs }),
+      }).catch((err) => console.error('Session-end pipeline failed:', err));
+    }
 
-    blobPromise
-      .then((blob) => {
-        if (blob.size < 500) return; // skip empty / near-empty recordings
-        const form = new FormData();
-        form.append('session_id', sid);
-        form.append('audio', blob, `${sid}.webm`);
-        return fetch('/api/session/audio', { method: 'POST', body: form });
-      })
-      .catch((err) => console.error('Audio upload failed:', err));
+    // ── 4. Best-effort: upload audio recording ──
+    if (sid && blobPromise) {
+      blobPromise
+        .then((blob) => {
+          if (blob.size < 500) return;
+          const form = new FormData();
+          form.append('session_id', sid);
+          form.append('audio', blob, `${sid}.webm`);
+          return fetch('/api/session/audio', { method: 'POST', body: form });
+        })
+        .catch((err) => console.error('Audio upload failed:', err));
+    }
   };
 
   const handleAttach = async (files: FileList) => {
