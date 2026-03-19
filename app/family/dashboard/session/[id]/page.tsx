@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { SessionPhotos } from '@/components/SessionPhotos';
+import { RetryPolishButton } from '@/components/RetryPolishButton';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Download, FileText, BookOpen } from 'lucide-react';
@@ -39,6 +40,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     minute: '2-digit',
   });
 
+  const hasPolished = !!(transcript?.polished_text as string | null);
+
   return (
     <main
       className="min-h-screen p-6 max-w-5xl mx-auto"
@@ -67,7 +70,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           </p>
         </div>
 
-        {transcript && (
+        {hasPolished && transcript && (
           <div className="flex flex-col gap-2 flex-shrink-0">
             <ExportButton
               href={`/api/export?session_id=${id}&type=pdf`}
@@ -93,25 +96,36 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
       {/* Main content */}
       <div className="space-y-6">
-        {/* Transcript */}
         {transcript ? (
-          <TranscriptViewer
-            rawText={(transcript.raw_text as string) ?? ''}
-            polishedText={(transcript.polished_text as string) ?? ''}
-            transcriptId={transcript.id as string}
-          />
+          <>
+            {!hasPolished && (
+              <div
+                className="rounded-xl px-5 py-4 flex items-center justify-between gap-4"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+              >
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  Мемуарный текст не был сформирован — разговор сохранён, можно обработать сейчас.
+                </p>
+                <RetryPolishButton transcriptId={transcript.id as string} />
+              </div>
+            )}
+            <TranscriptViewer
+              rawText={(transcript.raw_text as string) ?? ''}
+              polishedText={(transcript.polished_text as string) ?? ''}
+              transcriptId={transcript.id as string}
+            />
+          </>
         ) : (
           <div
             className="rounded-2xl px-6 py-10 text-center"
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
           >
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              История обрабатывается, загляните чуть позже...
+              Разговор не был сохранён — возможно, сессия завершилась раньше времени.
             </p>
           </div>
         )}
 
-        {/* Photos — always visible, can add at any time */}
         <SessionPhotos
           sessionId={id}
           initialPhotos={photos ?? []}
