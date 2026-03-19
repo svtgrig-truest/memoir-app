@@ -89,8 +89,8 @@ export async function connectToRealtime(
   // Data channel for events
   const dc = pc.createDataChannel('oai-events');
 
-  // No silence timer — AI asks one question and waits indefinitely for a response.
-  const clearSilenceTimer = () => {};
+  // Track whether AI is currently generating/speaking so barge-in cancel is safe
+  let isAIResponding = false;
 
   dc.onopen = () => {
     // Configure the session with system prompt
@@ -104,13 +104,13 @@ export async function connectToRealtime(
           silence_duration_ms: 1200,
           threshold: 0.6,
           prefix_padding_ms: 300,
+          create_response: true,   // auto-respond after user stops speaking
         },
       },
     }));
 
-    // Trigger AI to speak first after session is configured.
-    // Clear the audio buffer first to prevent mic noise accumulated during
-    // WebRTC setup from triggering a spurious VAD response alongside ours.
+    // Trigger AI to speak first (greeting). Clear buffer first to prevent
+    // mic noise accumulated during WebRTC setup from triggering a VAD response.
     setTimeout(() => {
       if (dc.readyState !== 'open') return;
       dc.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
@@ -121,15 +121,17 @@ export async function connectToRealtime(
     try {
       const event = JSON.parse(e.data as string) as Record<string, unknown>;
 
-      // Silence follow-up timer management
-      // No silence follow-up: AI waits for user to speak
-      if (event.type === 'input_audio_buffer.speech_started') {
-        // User started speaking: cancel any in-progress AI response (barge-in)
+      // Track AI speaking state
+      if (event.type === 'response.created') isAIResponding = true;
+      if (event.type === 'response.done' || event.type === 'response.cancelled') isAIResponding = false;
+
+      // Barge-in: only cancel if AI is actively responding, not when it is already silent
+      if (event.type === 'input_audio_buffer.speech_started' && isAIResponding) {
         if (dc.readyState === 'open') {
           dc.send(JSON.stringify({ type: 'response.cancel' }));
+          isAIResponding = false;
         }
       }
-
 
       onEvent(event);
     } catch {
