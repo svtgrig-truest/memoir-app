@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { SessionPhotos } from '@/components/SessionPhotos';
 import { RetryPolishButton } from '@/components/RetryPolishButton';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Download, FileText, BookOpen } from 'lucide-react';
 
@@ -30,6 +30,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const txRaw = sessionData.transcripts;
   const transcript: Record<string, unknown> | null =
     Array.isArray(txRaw) ? (txRaw[0] ?? null) : (txRaw as Record<string, unknown> | null) ?? null;
+
+  if (!transcript) redirect('/family/dashboard');
   const chapter = sessionData.chapters as Record<string, unknown> | null;
 
   const dateStr = new Date(sessionData.started_at as string).toLocaleDateString('ru-RU', {
@@ -115,16 +117,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
               transcriptId={transcript.id as string}
             />
           </>
-        ) : (
-          <div
-            className="rounded-2xl px-6 py-10 text-center"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
-          >
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              Разговор не был сохранён — возможно, сессия завершилась раньше времени.
-            </p>
-          </div>
-        )}
+        ) : null}
 
         <SessionPhotos
           sessionId={id}
