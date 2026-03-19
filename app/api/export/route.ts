@@ -7,15 +7,24 @@ let cyrillicFontBase64: string | null = null;
 
 async function getCyrillicFont(): Promise<string | null> {
   if (cyrillicFontBase64) return cyrillicFontBase64;
-  try {
-    const res = await fetch('https://fonts.gstatic.com/s/ptsans/v17/jizaRExUiTo99u79D0KEwA.ttf');
-    if (!res.ok) return null;
-    const buffer = await res.arrayBuffer();
-    cyrillicFontBase64 = Buffer.from(buffer).toString('base64');
-    return cyrillicFontBase64;
-  } catch {
-    return null;
+  // Try multiple reliable sources for a Cyrillic-capable TTF font
+  const FONT_URLS = [
+    'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
+    'https://github.com/dejavu-fonts/dejavu-fonts/raw/version_2_37/ttf/DejaVuSans.ttf',
+  ];
+  for (const url of FONT_URLS) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const buffer = await res.arrayBuffer();
+      cyrillicFontBase64 = Buffer.from(buffer).toString('base64');
+      return cyrillicFontBase64;
+    } catch {
+      // try next URL
+    }
   }
+  console.error('All Cyrillic font sources failed — PDF will show only Latin chars');
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -43,7 +52,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(transcript.raw_text ?? '', {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': `attachment; filename="transcript-${sessionId}.txt"`,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(((transcript.short_title as string | null) ?? 'разговор').replace(/[\/:*?"<>|]/g, ''))}-оригинал.txt`,
       },
     });
   }
@@ -52,7 +61,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(transcript.polished_text ?? '', {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': `attachment; filename="memoir-${sessionId}.txt"`,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(((transcript.short_title as string | null) ?? 'мемуар').replace(/[\/:*?"<>|]/g, ''))}.txt`,
       },
     });
   }
@@ -60,15 +69,17 @@ export async function GET(req: NextRequest) {
   // type === 'pdf'
   const session = transcript.sessions as Record<string, unknown>;
   const chapter = session?.chapters as Record<string, unknown> | null;
-  const title = (chapter?.title_ru as string) ?? 'Воспоминания';
+  const shortTitle = (transcript.short_title as string | null) ?? null;
+  const title = shortTitle ?? (chapter?.title_ru as string) ?? 'Воспоминания';
   const date = new Date(session?.started_at as string).toLocaleDateString('ru-RU');
+  const safeFilename = title.replace(/[\/:*?"<>|]/g, '').trim() || 'memoir';
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const fontData = await getCyrillicFont();
   if (fontData) {
-    doc.addFileToVFS('PTSans-Regular.ttf', fontData);
-    doc.addFont('PTSans-Regular.ttf', 'CyrillicFont', 'normal');
+    doc.addFileToVFS('DejaVuSans.ttf', fontData);
+    doc.addFont('DejaVuSans.ttf', 'CyrillicFont', 'normal');
     doc.setFont('CyrillicFont');
   } else {
     doc.setFont('helvetica', 'normal');
@@ -101,7 +112,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(pdfBuffer, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="memoir-${sessionId}.pdf"`,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(safeFilename)}.pdf`,
     },
   });
 }
