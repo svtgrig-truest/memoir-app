@@ -168,15 +168,30 @@ export default function Home() {
       }).catch((err) => console.error('Session-end pipeline failed:', err));
     }
 
-    // ── 4. Best-effort: upload audio recording ──
+    // ── 4. Best-effort: upload audio directly to Supabase (bypasses Vercel body limit) ──
     if (sid && blobPromise) {
       blobPromise
-        .then((blob) => {
-          if (blob.size < 500) return;
-          const form = new FormData();
-          form.append('session_id', sid);
-          form.append('audio', blob, `${sid}.webm`);
-          return fetch('/api/session/audio', { method: 'POST', body: form });
+        .then(async (blob) => {
+          if (blob.size < 500) return; // skip empty / near-empty blobs
+          const mime = blob.type || 'audio/webm';
+          // Get a signed upload URL (server → Supabase, no file passes through Vercel)
+          const signRes = await fetch(
+            `/api/session/audio?session_id=${encodeURIComponent(sid)}&intent=upload&mime=${encodeURIComponent(mime)}`
+          );
+          if (!signRes.ok) {
+            console.error('Audio sign URL failed:', await signRes.text());
+            return;
+          }
+          const { signedUrl } = await signRes.json() as { signedUrl: string };
+          // PUT blob directly to Supabase Storage (no Vercel 4.5 MB cap)
+          const uploadRes = await fetch(signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': mime, 'x-upsert': 'true' },
+            body: blob,
+          });
+          if (!uploadRes.ok) {
+            console.error('Direct audio upload failed:', uploadRes.status, await uploadRes.text());
+          }
         })
         .catch((err) => console.error('Audio upload failed:', err));
     }
