@@ -7,6 +7,7 @@ import { RetryPolishButton } from '@/components/RetryPolishButton';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Download, FileText, BookOpen } from 'lucide-react';
+import { AudioPlayer } from '@/components/AudioPlayer';
 
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -97,6 +98,11 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Main content */}
+      {/* Audio player (lazy-loads from /api/session/audio) */}
+      <div className="mb-2">
+        <AudioPlayer sessionId={id} shortTitle={(transcript?.short_title as string | null) ?? null} />
+      </div>
+
       <div className="space-y-6">
         {transcript ? (
           <>
