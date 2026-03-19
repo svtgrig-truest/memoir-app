@@ -81,11 +81,7 @@ export async function connectToRealtime(
   document.body.appendChild(audioEl);
   pc.ontrack = (e) => {
     audioEl.srcObject = e.streams[0];
-    // Pipe AI voice into the recording mix
-    try {
-      const aiSource = audioCtx.createMediaStreamSource(e.streams[0]);
-      aiSource.connect(dest);
-    } catch { /* ignore if AudioContext already closed */ }
+    ontrackAiCapture?.(e.streams[0]);
   };
 
   // Microphone input
@@ -93,38 +89,56 @@ export async function connectToRealtime(
   pc.addTrack(stream.getTracks()[0]);
 
   // ── Audio recording (both mic + AI voice mixed) ─────────────────────────
-  const audioCtx = new AudioContext();
-  if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
-  const dest = audioCtx.createMediaStreamDestination();
-  const micSource = audioCtx.createMediaStreamSource(stream);
-  micSource.connect(dest);
+  // Wrapped in try/catch so a recording failure never breaks WebRTC connectivity
+  let stopRecording: () => Promise<Blob> = () => Promise.resolve(new Blob([]));
+  let recorderCleanup: () => void = () => {};
+  let ontrackAiCapture: ((stream: MediaStream) => void) | null = null;
 
-  const recChunks: BlobPart[] = [];
-  // Ordered by preference; mp4/aac is the only option on Safari/iOS
-  const mimeType = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/ogg;codecs=opus',
-    'audio/mp4',
-  ].find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) ?? '';
-  const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : {});
-  recorder.ondataavailable = (ev) => { if (ev.data.size > 0) recChunks.push(ev.data); };
-  recorder.start(2000); // save a chunk every 2 s so data isn't lost on crash
+  try {
+    const audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
+    const dest = audioCtx.createMediaStreamDestination();
+    const micSource = audioCtx.createMediaStreamSource(stream);
+    micSource.connect(dest);
 
-  const stopRecording = (): Promise<Blob> =>
-    new Promise((resolve) => {
-      if (recorder.state === 'inactive') {
-        resolve(new Blob(recChunks, { type: recorder.mimeType || mimeType || 'audio/webm' }));
-        return;
-      }
-      recorder.onstop = () => {
-        // Use recorder.mimeType (browser-resolved) rather than the requested mimeType string
-        const resolvedType = recorder.mimeType || mimeType || 'audio/webm';
-        resolve(new Blob(recChunks, { type: resolvedType }));
-        audioCtx.close().catch(() => {});
-      };
-      recorder.stop();
-    });
+    const recChunks: BlobPart[] = [];
+    const mimeType = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+    ].find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) ?? '';
+    const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : {});
+    recorder.ondataavailable = (ev) => { if (ev.data.size > 0) recChunks.push(ev.data); };
+    recorder.start(2000);
+
+    stopRecording = () =>
+      new Promise((resolve) => {
+        if (recorder.state === 'inactive') {
+          resolve(new Blob(recChunks, { type: recorder.mimeType || mimeType || 'audio/webm' }));
+          return;
+        }
+        recorder.onstop = () => {
+          resolve(new Blob(recChunks, { type: recorder.mimeType || mimeType || 'audio/webm' }));
+          audioCtx.close().catch(() => {});
+        };
+        recorder.stop();
+      });
+
+    recorderCleanup = () => {
+      if (recorder.state !== 'inactive') { try { recorder.stop(); } catch { /* ignore */ } }
+      audioCtx.close().catch(() => {});
+    };
+
+    ontrackAiCapture = (aiStream: MediaStream) => {
+      try {
+        const aiSource = audioCtx.createMediaStreamSource(aiStream);
+        aiSource.connect(dest);
+      } catch { /* ignore */ }
+    };
+  } catch (recErr) {
+    console.warn('Audio recording setup failed — session will proceed without recording:', recErr);
+  }
 
   // Data channel for events
   const dc = pc.createDataChannel('oai-events');
@@ -209,12 +223,11 @@ export async function connectToRealtime(
     audioEl,
     stopRecording,
     disconnect: () => {
-      if (recorder.state !== 'inactive') recorder.stop();
+      recorderCleanup();
       stream.getTracks().forEach((t) => t.stop());
       pc.close();
       audioEl.srcObject = null;
       audioEl.remove();
-      audioCtx.close().catch(() => {});
     },
   };
 }
