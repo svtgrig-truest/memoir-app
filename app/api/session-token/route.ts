@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       .select('session_summary')
       .not('session_summary', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(3),
+      .limit(6),
     chapterId
       ? supabaseAdmin.from('chapters').select('title_ru').eq('id', chapterId).single()
       : Promise.resolve({ data: null, error: null }),
