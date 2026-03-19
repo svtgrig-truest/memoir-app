@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { supabaseAdmin } from '@/lib/supabase/server';
 import Link from 'next/link';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, BookText } from 'lucide-react';
 
 interface TranscriptMeta {
   id: string;
@@ -77,12 +77,30 @@ export default async function ArchivePage() {
         >
           ← Memoir
         </Link>
-        <h1 className="text-2xl font-semibold">Мои записи</h1>
-        {totalSessions > 0 && (
-          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-            {totalSessions} {totalSessions === 1 ? 'запись' : totalSessions < 5 ? 'записи' : 'записей'}
-          </p>
-        )}
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Мои записи</h1>
+            {totalSessions > 0 && (
+              <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                {totalSessions} {totalSessions === 1 ? 'запись' : totalSessions < 5 ? 'записи' : 'записей'}
+              </p>
+            )}
+          </div>
+          {totalSessions > 0 && (
+            <Link
+              href="/archive/book"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl transition-all flex-shrink-0"
+              style={{
+                color: 'var(--text-muted)',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <BookText className="w-4 h-4" />
+              Вся книга
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Chapter sections */}
