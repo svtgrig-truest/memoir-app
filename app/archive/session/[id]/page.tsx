@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { SessionPhotos } from '@/components/SessionPhotos';
 import { TitleEditor } from '@/components/TitleEditor';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Download, FileText, BookOpen, Mic } from 'lucide-react';
 
@@ -30,6 +30,9 @@ export default async function ArchiveSessionPage({ params }: { params: Promise<{
   const txRaw = sessionData.transcripts;
   const transcript: Record<string, unknown> | null =
     Array.isArray(txRaw) ? (txRaw[0] ?? null) : (txRaw as Record<string, unknown> | null) ?? null;
+
+  // No transcript = session was too short or didn't complete — don't show it
+  if (!transcript) redirect('/archive');
   const chapter = sessionData.chapters as Record<string, unknown> | null;
   const chapterId = chapter?.id as string | null ?? null;
   const chapterTitle = chapter?.title_ru as string | null ?? null;
@@ -134,14 +137,7 @@ export default async function ArchiveSessionPage({ params }: { params: Promise<{
             transcriptId={transcript.id as string}
           />
         ) : (
-          <div
-            className="rounded-2xl px-6 py-10 text-center"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
-          >
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              История обрабатывается, загляните чуть позже...
-            </p>
-          </div>
+          null
         )}
 
         <SessionPhotos sessionId={id} initialPhotos={photos ?? []} />
