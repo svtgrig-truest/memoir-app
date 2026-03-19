@@ -139,22 +139,38 @@ export default function Home() {
   };
 
   const handleEnd = async () => {
-    connectionRef.current?.disconnect();
+    const conn = connectionRef.current;
     connectionRef.current = null;
     setOrbState('idle');
     setIsSessionActive(false);
 
-    if (sessionId) {
-      fetch('/api/session-end', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, messages: messagesRef.current }),
-      }).catch((err) => console.error('Session-end pipeline failed:', err));
-    }
-
+    const sid = sessionId;
+    const msgs = messagesRef.current;
     setSessionId(null);
     messagesRef.current = [];
     setPhotoCount(0);
+
+    if (!conn || !sid) { conn?.disconnect(); return; }
+
+    // Stop recording before closing streams, then upload in background
+    const blobPromise = conn.stopRecording();
+    conn.disconnect();
+
+    fetch('/api/session-end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sid, messages: msgs }),
+    }).catch((err) => console.error('Session-end pipeline failed:', err));
+
+    blobPromise
+      .then((blob) => {
+        if (blob.size < 500) return; // skip empty / near-empty recordings
+        const form = new FormData();
+        form.append('session_id', sid);
+        form.append('audio', blob, `${sid}.webm`);
+        return fetch('/api/session/audio', { method: 'POST', body: form });
+      })
+      .catch((err) => console.error('Audio upload failed:', err));
   };
 
   const handleAttach = async (files: FileList) => {
