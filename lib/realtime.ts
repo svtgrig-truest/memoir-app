@@ -79,6 +79,11 @@ export async function connectToRealtime(
   audioEl.autoplay = true;
   audioEl.style.display = 'none';
   document.body.appendChild(audioEl);
+  // ── Recording vars declared before pc.ontrack to avoid TDZ ────────────
+  let stopRecording: () => Promise<Blob> = () => Promise.resolve(new Blob([]));
+  let recorderCleanup: () => void = () => {};
+  let ontrackAiCapture: ((stream: MediaStream) => void) | null = null;
+
   pc.ontrack = (e) => {
     audioEl.srcObject = e.streams[0];
     ontrackAiCapture?.(e.streams[0]);
@@ -90,9 +95,6 @@ export async function connectToRealtime(
 
   // ── Audio recording (both mic + AI voice mixed) ─────────────────────────
   // Wrapped in try/catch so a recording failure never breaks WebRTC connectivity
-  let stopRecording: () => Promise<Blob> = () => Promise.resolve(new Blob([]));
-  let recorderCleanup: () => void = () => {};
-  let ontrackAiCapture: ((stream: MediaStream) => void) | null = null;
 
   try {
     const audioCtx = new AudioContext();
