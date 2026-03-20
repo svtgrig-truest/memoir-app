@@ -4,6 +4,7 @@ import { VoiceOrb } from '@/components/VoiceOrb';
 import { connectToRealtime, RealtimeConnection, TurnMessage } from '@/lib/realtime';
 import { Chapter, OrbState } from '@/types';
 import { Pause, X, ImagePlus, CheckCircle2 } from 'lucide-react';
+import { LoginGate } from '@/components/LoginGate';
 
 const orbLabels: Record<OrbState, string> = {
   idle: 'Нажмите, чтобы начать',
@@ -13,6 +14,7 @@ const orbLabels: Record<OrbState, string> = {
 };
 
 export default function Home() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
   const [orbState, setOrbState] = useState<OrbState>('idle');
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
@@ -27,6 +29,12 @@ export default function Home() {
   const autostartFiredRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+
+  useEffect(() => {
+    const ok = document.cookie.split(';').some(c => c.trim().startsWith('app_auth='));
+    setAuthed(ok);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -259,6 +267,11 @@ export default function Home() {
   };
 
   const selectedChapterTitle = chapters.find((c) => c.id === selectedChapterId)?.title_ru;
+
+  if (authed === null) return (
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }} />
+  );
+  if (!authed) return <LoginGate onSuccess={() => setAuthed(true)} />;
 
   return (
     <main className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
