@@ -96,13 +96,8 @@ export async function connectToRealtime(
   // ── Audio recording (both mic + AI voice mixed) ─────────────────────────
   // Wrapped in try/catch so a recording failure never breaks WebRTC connectivity
 
+  // ── Mic-only recording: no AudioContext to avoid interfering with AI audio playback ──
   try {
-    const audioCtx = new AudioContext();
-    if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
-    const dest = audioCtx.createMediaStreamDestination();
-    const micSource = audioCtx.createMediaStreamSource(stream);
-    micSource.connect(dest);
-
     const recChunks: BlobPart[] = [];
     const mimeType = [
       'audio/webm;codecs=opus',
@@ -110,7 +105,7 @@ export async function connectToRealtime(
       'audio/ogg;codecs=opus',
       'audio/mp4',
     ].find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) ?? '';
-    const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : {});
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
     recorder.ondataavailable = (ev) => { if (ev.data.size > 0) recChunks.push(ev.data); };
     recorder.start(2000);
 
@@ -122,21 +117,12 @@ export async function connectToRealtime(
         }
         recorder.onstop = () => {
           resolve(new Blob(recChunks, { type: recorder.mimeType || mimeType || 'audio/webm' }));
-          audioCtx.close().catch(() => {});
         };
         recorder.stop();
       });
 
     recorderCleanup = () => {
       if (recorder.state !== 'inactive') { try { recorder.stop(); } catch { /* ignore */ } }
-      audioCtx.close().catch(() => {});
-    };
-
-    ontrackAiCapture = (aiStream: MediaStream) => {
-      try {
-        const aiSource = audioCtx.createMediaStreamSource(aiStream);
-        aiSource.connect(dest);
-      } catch { /* ignore */ }
     };
   } catch (recErr) {
     console.warn('Audio recording setup failed — session will proceed without recording:', recErr);
@@ -157,7 +143,7 @@ export async function connectToRealtime(
         input_audio_transcription: { model: 'whisper-1' },
         turn_detection: {
           type: 'server_vad',
-          silence_duration_ms: 1200,
+          silence_duration_ms: 2000,
           threshold: 0.6,
           prefix_padding_ms: 300,
           create_response: true,   // auto-respond after user stops speaking
@@ -186,6 +172,9 @@ export async function connectToRealtime(
         if (dc.readyState === 'open') {
           dc.send(JSON.stringify({ type: 'response.cancel' }));
           isAIResponding = false;
+          // After cancel, AI must respond once user finishes — VAD handles this
+          // via create_response:true, but we log for debugging
+          console.log('[barge-in] cancelled AI response, waiting for user to finish');
         }
       }
 
