@@ -196,17 +196,12 @@ export async function connectToRealtime(
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  const response = await fetch(
-    'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${ephemeralToken}`,
-        'Content-Type': 'application/sdp',
-      },
-      body: offer.sdp,
-    }
-  );
+  // Route SDP handshake through our server to avoid geo-restrictions on api.openai.com
+  const response = await fetch('/api/realtime-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sdp: offer.sdp, token: ephemeralToken }),
+  });
 
   if (!response.ok) {
     throw new Error(`OpenAI Realtime connection failed: ${response.status}`);
