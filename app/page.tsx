@@ -20,6 +20,7 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [photoCount, setPhotoCount] = useState(0);
   const [photoToast, setPhotoToast] = useState<string | null>(null);
+  const [msgCount, setMsgCount] = useState(0);
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const messagesRef = useRef<TurnMessage[]>([]);
   const isConnectingRef = useRef(false);
@@ -65,6 +66,7 @@ export default function Home() {
     isConnectingRef.current = true;
     setOrbState('thinking');
     setPhotoCount(0);
+    setMsgCount(0);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
@@ -82,6 +84,7 @@ export default function Home() {
       const { client_secret, session_id, system_prompt } = await tokenRes.json();
       setSessionId(session_id);
       messagesRef.current = [];
+      setMsgCount(0);
 
       const conn = await connectToRealtime(
         client_secret.value,
@@ -94,12 +97,12 @@ export default function Home() {
 
           if (event.type === 'conversation.item.input_audio_transcription.completed') {
             const text = (event.transcript as string)?.trim();
-            if (text) messagesRef.current = [...messagesRef.current, { role: 'user', text }];
+            if (text) { messagesRef.current = [...messagesRef.current, { role: 'user', text }]; setMsgCount(c => c + 1); }
           }
 
           if (event.type === 'response.audio_transcript.done') {
             const text = (event.transcript as string)?.trim();
-            if (text) messagesRef.current = [...messagesRef.current, { role: 'assistant', text }];
+            if (text) { messagesRef.current = [...messagesRef.current, { role: 'assistant', text }]; setMsgCount(c => c + 1); }
           }
 
           if (!['response.audio.delta', 'input_audio_buffer.appended'].includes(event.type as string)) {
@@ -161,11 +164,26 @@ export default function Home() {
 
     // ── 3. Critical: save transcript pipeline — always runs ──
     if (sid) {
+      console.log('[handleEnd] session_id:', sid, 'messages:', msgs.length);
+      showToast('Сохраняю запись...');
       fetch('/api/session-end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sid, messages: msgs }),
-      }).catch((err) => console.error('Session-end pipeline failed:', err));
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          console.log('[session-end] response:', data);
+          if (data.skipped) showToast('Разговор слишком короткий, запись не создана');
+          else if (data.ok) showToast('Запись сохранена ✓');
+          else showToast('Ошибка при сохранении');
+        })
+        .catch((err) => {
+          console.error('[session-end] failed:', err);
+          showToast('Ошибка при сохранении: ' + err.message);
+        });
+    } else {
+      console.warn('[handleEnd] no session_id — skipping session-end call');
     }
 
     // ── 4. Best-effort: upload audio directly to Supabase (bypasses Vercel body limit) ──
@@ -326,6 +344,13 @@ export default function Home() {
           {isSessionActive && selectedChapterTitle && (
             <p className="text-base -mt-4" style={{ color: 'var(--text-muted)' }}>
               Тема: {selectedChapterTitle}
+            </p>
+          )}
+
+          {/* Message count — diagnostic indicator */}
+          {isSessionActive && (
+            <p className="text-xs -mt-2" style={{ color: 'var(--text-muted)' }}>
+              {msgCount > 0 ? `${msgCount} реплик` : 'Жду транскрипции...'}
             </p>
           )}
 
