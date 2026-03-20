@@ -4,6 +4,7 @@ export interface SystemPromptOptions {
   sessionSummaries: string[];
   lastChapterShortTitle?: string | null;
   lastChapterSummary?: string | null;
+  recentTranscripts?: { title: string | null; text: string }[];
 }
 
 export interface TurnMessage {
@@ -21,7 +22,7 @@ export interface RealtimeConnection {
 }
 
 export function buildSystemPrompt(opts: SystemPromptOptions): string {
-  const { chapterTitle, heritageSummary, sessionSummaries, lastChapterShortTitle, lastChapterSummary } = opts;
+  const { chapterTitle, heritageSummary, sessionSummaries, lastChapterShortTitle, lastChapterSummary, recentTranscripts } = opts;
 
   const chapterContext = chapterTitle
     ? `Цель текущей беседы: исследуй тему — «${chapterTitle}».`
@@ -33,6 +34,15 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
 
   const summarySection = sessionSummaries.length
     ? `\n\nУЖЕ ИЗВЕСТНЫЕ ФАКТЫ ИЗ ПРОШЛЫХ РАЗГОВОРОВ:\n${sessionSummaries.join('\n')}\n\nЭТИ КОНКРЕТНЫЕ ДЕТАЛИ УЖЕ РАССКАЗАНЫ — не спрашивай о них снова и не делай вид, что узнаёшь впервые. Если хочешь углубиться в уже упомянутую тему — спроси о конкретном аспекте, которого ещё не касались. Например, если уже знаешь про дом на Ленинском проспекте, не спрашивай «где вы жили?» — спроси о чём-то конкретном, о чём ещё не говорили.`
+    : '';
+
+  const recentSection = recentTranscripts && recentTranscripts.length
+    ? `\n\nПОСЛЕДНИЕ БЕСЕДЫ — ПОЛНЫЙ КОНТЕКСТ:\n` +
+      recentTranscripts.map((t, i) => {
+        const label = t.title ? `«${t.title}»` : `Беседа ${i + 1}`;
+        return `[${i + 1}] ${label}\n${t.text}`;
+      }).join('\n---\n') +
+      `\n\nЭТО ПОДРОБНЫЕ ЗАПИСИ НЕДАВНИХ БЕСЕД. Ты слышал эти истории и помнишь их во всех деталях. Никогда не спрашивай о том, что уже описано выше — ты это уже знаешь. Можешь ссылаться на конкретные детали, имена и события из этих рассказов, показывая, что ценишь и помнишь всё услышанное.`
     : '';
 
   // Greeting instruction — context-aware
@@ -64,7 +74,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
 - Каждый следующий вопрос должен быть связан с тем, что только что сказал собеседник: либо углубляет его ответ, либо проводит контраст («А до этого было иначе?»), либо подхватывает упомянутую деталь — никогда не переходи к новой теме без моста
 - После примерно 40 минут мягко предложи завершить беседу
 
-${chapterContext}${heritageSection}${summarySection}${greetingSection}`;
+${chapterContext}${heritageSection}${recentSection}${summarySection}${greetingSection}`;
 }
 
 export async function connectToRealtime(
