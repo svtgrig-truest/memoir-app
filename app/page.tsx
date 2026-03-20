@@ -128,9 +128,19 @@ export default function Home() {
       setOrbState('listening');
     } catch (err) {
       clearTimeout(timeout);
-      console.error('Failed to start session:', err);
+      const errName = (err as DOMException)?.name ?? '';
+      const errMsg = (err as Error)?.message ?? '';
+      console.error('[startSession] failed:', errName, errMsg, err);
       setOrbState('idle');
-      showToast('Не удалось подключиться. Попробуйте ещё раз.');
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+        showToast('Нужен доступ к микрофону. Разрешите его в браузере и попробуйте снова.');
+      } else if (errName === 'NotFoundError') {
+        showToast('Микрофон не найден. Проверьте, подключён ли он.');
+      } else if (errMsg.includes('Failed to get session token') || errMsg.includes('AbortError') || errName === 'AbortError') {
+        showToast('Ошибка соединения с сервером. Проверьте интернет и попробуйте снова.');
+      } else {
+        showToast('Не удалось подключиться. Попробуйте ещё раз.');
+      }
     } finally {
       isConnectingRef.current = false;
     }
