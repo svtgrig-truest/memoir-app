@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { VoiceOrb } from '@/components/VoiceOrb';
 import { connectToRealtime, RealtimeConnection, TurnMessage } from '@/lib/realtime';
 import { Chapter, OrbState } from '@/types';
-import { Pause, X, ImagePlus, CheckCircle2 } from 'lucide-react';
+import { Pause, X, ImagePlus, CheckCircle2, Plus, Check } from 'lucide-react';
 import { LoginGate } from '@/components/LoginGate';
 
 const orbLabels: Record<OrbState, string> = {
@@ -23,12 +23,16 @@ export default function Home() {
   const [photoCount, setPhotoCount] = useState(0);
   const [photoToast, setPhotoToast] = useState<string | null>(null);
   const [msgCount, setMsgCount] = useState(0);
+  const [isAddingChapter, setIsAddingChapter] = useState(false);
+  const [newChapterTitle, setNewChapterTitle] = useState('');
+  const [isCreatingChapter, setIsCreatingChapter] = useState(false);
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const messagesRef = useRef<TurnMessage[]>([]);
   const isConnectingRef = useRef(false);
   const autostartFiredRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const newChapterInputRef = useRef<HTMLInputElement>(null);
 
 
   useEffect(() => {
@@ -268,6 +272,28 @@ export default function Home() {
 
   const selectedChapterTitle = chapters.find((c) => c.id === selectedChapterId)?.title_ru;
 
+  const handleAddChapter = async () => {
+    const name = newChapterTitle.trim();
+    if (!name || isCreatingChapter) return;
+    setIsCreatingChapter(true);
+    try {
+      const res = await fetch('/api/chapters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title_ru: name }),
+      });
+      if (res.ok) {
+        const created = await res.json() as { id: string; title_ru: string; display_order: number; theme: string };
+        setChapters(prev => [...prev, created]);
+        setSelectedChapterId(created.id);
+        setNewChapterTitle('');
+        setIsAddingChapter(false);
+      }
+    } finally {
+      setIsCreatingChapter(false);
+    }
+  };
+
   if (authed === null) return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }} />
   );
@@ -338,6 +364,70 @@ export default function Home() {
                 href={isSessionActive ? undefined : `/archive/chapter/${ch.id}`}
               />
             ))}
+
+            {/* Add new chapter */}
+            {!isSessionActive && (
+              isAddingChapter ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={newChapterInputRef}
+                    type="text"
+                    value={newChapterTitle}
+                    onChange={e => setNewChapterTitle(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleAddChapter();
+                      if (e.key === 'Escape') { setIsAddingChapter(false); setNewChapterTitle(''); }
+                    }}
+                    placeholder="Название темы..."
+                    autoFocus
+                    maxLength={60}
+                    className="rounded-full px-4 py-2 text-sm outline-none"
+                    style={{
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--accent)',
+                      color: 'var(--text)',
+                      minWidth: '160px',
+                    }}
+                  />
+                  <button
+                    onClick={handleAddChapter}
+                    disabled={isCreatingChapter || !newChapterTitle.trim()}
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-40"
+                    style={{ background: 'var(--accent)', color: '#0d0b09' }}
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => { setIsAddingChapter(false); setNewChapterTitle(''); }}
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
+                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAddingChapter(true)}
+                  className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-all"
+                  style={{
+                    border: '1px dashed var(--border)',
+                    color: 'var(--text-muted)',
+                    background: 'transparent',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = 'var(--accent)';
+                    e.currentTarget.style.color = 'var(--accent)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Новая тема
+                </button>
+              )
+            )}
           </div>
         </section>
 
