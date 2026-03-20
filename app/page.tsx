@@ -283,7 +283,7 @@ export default function Home() {
         body: JSON.stringify({ title_ru: name }),
       });
       if (res.ok) {
-        const created = await res.json() as { id: string; title_ru: string; display_order: number; theme: string };
+        const created = await res.json() as Chapter;
         setChapters(prev => [...prev, created]);
         setSelectedChapterId(created.id);
         setNewChapterTitle('');
