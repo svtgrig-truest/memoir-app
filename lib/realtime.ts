@@ -82,11 +82,9 @@ export async function connectToRealtime(
   // ── Recording vars declared before pc.ontrack to avoid TDZ ────────────
   let stopRecording: () => Promise<Blob> = () => Promise.resolve(new Blob([]));
   let recorderCleanup: () => void = () => {};
-  let ontrackAiCapture: ((stream: MediaStream) => void) | null = null;
 
   pc.ontrack = (e) => {
     audioEl.srcObject = e.streams[0];
-    ontrackAiCapture?.(e.streams[0]);
   };
 
   // Microphone input
