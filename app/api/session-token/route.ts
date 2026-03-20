@@ -19,10 +19,10 @@ export async function POST(req: NextRequest) {
     supabaseAdmin.from('heritage_docs').select('summary_text'),
     supabaseAdmin
       .from('transcripts')
-      .select('session_summary')
+      .select('short_title, polished_text, session_summary')
       .not('session_summary', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(6),
+      .limit(8),
     chapterId
       ? supabaseAdmin.from('chapters').select('title_ru').eq('id', chapterId).single()
       : Promise.resolve({ data: null, error: null }),
@@ -66,8 +66,25 @@ export async function POST(req: NextRequest) {
     .filter(Boolean)
     .join('\n\n') ?? null;
   const heritageSummary = rawHeritage ? rawHeritage.slice(0, 12_000) : null;
-  const sessionSummaries =
-    transcriptsResult.data?.map((t) => t.session_summary as string).filter(Boolean) ?? [];
+
+  type TranscriptRow = { short_title: string | null; polished_text: string | null; session_summary: string | null };
+  const allTranscripts = (transcriptsResult.data ?? []) as TranscriptRow[];
+
+  // Last 2 sessions → full polished text (capped at 3 500 chars each)
+  const recentTranscripts = allTranscripts
+    .slice(0, 2)
+    .filter(t => t.polished_text)
+    .map(t => ({
+      title: t.short_title,
+      text: (t.polished_text as string).slice(0, 3_500),
+    }));
+
+  // Sessions 3-8 → compact session_summary only
+  const sessionSummaries = allTranscripts
+    .slice(2)
+    .map(t => t.session_summary as string)
+    .filter(Boolean);
+
   const chapterTitle = (chapterResult.data as { title_ru?: string } | null)?.title_ru ?? null;
   const systemPrompt = buildSystemPrompt({
     chapterTitle,
@@ -75,6 +92,7 @@ export async function POST(req: NextRequest) {
     sessionSummaries,
     lastChapterShortTitle,
     lastChapterSummary,
+    recentTranscripts,
   });
 
   // Get ephemeral token from OpenAI
