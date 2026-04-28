@@ -67,10 +67,15 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, durationMs: number | null = 3000) => {
     setPhotoToast(msg);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setPhotoToast(null), 3000);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    if (durationMs && durationMs > 0) {
+      toastTimerRef.current = setTimeout(() => setPhotoToast(null), durationMs);
+    }
   };
 
   const startSession = async (chapterId: string | null) => {
@@ -201,7 +206,8 @@ export default function Home() {
     console.log('[handleEnd] session:', sid, 'messages:', msgs.length, 'audio_blob_bytes:', blobSize);
 
     // Tell user not to close — we're saving both transcript and audio.
-    showToast('Сохраняю запись... Не закрывайте приложение');
+    // Persistent toast (no auto-dismiss) — replaced below by the final result.
+    showToast('Сохраняю запись... Не закрывайте приложение', null);
 
     // ── 2. Run session-end (server-side, survives client close) and audio upload
     // (client-side, MUST be awaited or browser will abort it on tab close)
@@ -266,15 +272,15 @@ export default function Home() {
     }
 
     if (sessionSkipped) {
-      showToast('Разговор слишком короткий, запись не создана');
+      showToast('Разговор слишком короткий, запись не создана', 6000);
     } else if (sessionOk && audioOk) {
-      showToast('Запись и аудио сохранены ✓');
+      showToast('Запись и аудио сохранены ✓', 6000);
     } else if (sessionOk && audioSkipped) {
-      showToast('Запись сохранена ✓ (без аудио)');
+      showToast('Запись сохранена ✓ (без аудио)', 6000);
     } else if (sessionOk && !audioOk) {
-      showToast('Текст сохранён, но аудио не загрузилось');
+      showToast('Текст сохранён, но аудио не загрузилось', 6000);
     } else {
-      showToast('Ошибка при сохранении записи');
+      showToast('Ошибка при сохранении записи', 6000);
     }
 
     // ── 4. Reset UI state only after all work is done ──
