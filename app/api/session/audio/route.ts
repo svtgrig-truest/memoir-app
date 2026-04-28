@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
   if (intent === 'upload') {
     const mime = searchParams.get('mime') ?? 'audio/webm';
     const path = `${sessionId}.${ext(mime)}`;
+    console.log('[audio/sign] upload requested for', path, 'mime:', mime);
     const { data, error } = await supabaseAdmin.storage
       .from(BUCKET)
       .createSignedUploadUrl(path);
@@ -29,6 +30,7 @@ export async function GET(req: NextRequest) {
       console.error('[audio/sign] createSignedUploadUrl failed:', error.message);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+    console.log('[audio/sign] signed upload URL issued for', path);
     return NextResponse.json({ signedUrl: data.signedUrl, path, token: data.token });
   }
 
