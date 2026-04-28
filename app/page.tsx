@@ -167,83 +167,122 @@ export default function Home() {
     const conn = connectionRef.current;
 
     // ── 0. Flush any in-flight Whisper transcription before tearing down WebRTC.
-    // Without this, if End is pressed while the user just finished speaking
-    // (or while still speaking), the last user reply is lost: pc.close() kills
-    // the data channel before `input_audio_transcription.completed` arrives.
     if (conn) {
       try { await flushPendingTranscription(conn); } catch { /* never block end */ }
     }
 
+    // ── 1. Stop recording, AWAIT the blob, then disconnect WebRTC.
+    // Critical: we must not reset the UI state yet — that signals the user
+    // they can close the app, which would abort the in-flight audio upload.
+    let blob: Blob | null = null;
+    if (conn) {
+      try {
+        blob = await conn.stopRecording();
+      } catch (e) {
+        console.warn('[handleEnd] stopRecording failed:', e);
+      }
+    }
+    try { conn?.disconnect(); } catch { /* ignore */ }
     connectionRef.current = null;
-    setOrbState('idle');
-    setIsSessionActive(false);
 
     const sid = sessionId;
     const msgs = messagesRef.current;
+
+    if (!sid) {
+      console.warn('[handleEnd] no session_id — nothing to save');
+      setOrbState('idle');
+      setIsSessionActive(false);
+      messagesRef.current = [];
+      setPhotoCount(0);
+      return;
+    }
+
+    const blobSize = blob?.size ?? 0;
+    console.log('[handleEnd] session:', sid, 'messages:', msgs.length, 'audio_blob_bytes:', blobSize);
+
+    // Tell user not to close — we're saving both transcript and audio.
+    showToast('Сохраняю запись... Не закрывайте приложение');
+
+    // ── 2. Run session-end (server-side, survives client close) and audio upload
+    // (client-side, MUST be awaited or browser will abort it on tab close)
+    // in parallel to minimise total wait time.
+
+    const sessionEndPromise = fetch('/api/session-end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sid, messages: msgs }),
+    })
+      .then((r) => r.json())
+      .then((data) => { console.log('[session-end] response:', data); return data; });
+
+    const audioUploadPromise = (async () => {
+      if (!blob || blob.size < 500) {
+        console.warn('[audio-upload] skipped — blob too small:', blobSize);
+        return { skipped: true, reason: 'blob_too_small', size: blobSize };
+      }
+      const mime = blob.type || 'audio/webm';
+      const t0 = Date.now();
+      const signRes = await fetch(
+        `/api/session/audio?session_id=${encodeURIComponent(sid)}&intent=upload&mime=${encodeURIComponent(mime)}`
+      );
+      if (!signRes.ok) {
+        const txt = await signRes.text();
+        throw new Error(`sign URL ${signRes.status}: ${txt}`);
+      }
+      const { signedUrl } = (await signRes.json()) as { signedUrl: string };
+      const uploadRes = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mime, 'x-upsert': 'true' },
+        body: blob,
+      });
+      if (!uploadRes.ok) {
+        const txt = await uploadRes.text();
+        throw new Error(`PUT ${uploadRes.status}: ${txt}`);
+      }
+      const elapsed = Date.now() - t0;
+      console.log('[audio-upload] uploaded', blob.size, 'bytes in', elapsed, 'ms');
+      return { ok: true, size: blob.size, ms: elapsed };
+    })();
+
+    const [sessionRes, audioRes] = await Promise.allSettled([sessionEndPromise, audioUploadPromise]);
+
+    // ── 3. Show appropriate final toast ──
+    let sessionOk = false;
+    let sessionSkipped = false;
+    if (sessionRes.status === 'fulfilled') {
+      if (sessionRes.value?.skipped) sessionSkipped = true;
+      else if (sessionRes.value?.ok) sessionOk = true;
+    } else {
+      console.error('[session-end] failed:', sessionRes.reason);
+    }
+
+    let audioOk = false;
+    let audioSkipped = false;
+    if (audioRes.status === 'fulfilled') {
+      if ((audioRes.value as { skipped?: boolean })?.skipped) audioSkipped = true;
+      else if ((audioRes.value as { ok?: boolean })?.ok) audioOk = true;
+    } else {
+      console.error('[audio-upload] failed:', audioRes.reason);
+    }
+
+    if (sessionSkipped) {
+      showToast('Разговор слишком короткий, запись не создана');
+    } else if (sessionOk && audioOk) {
+      showToast('Запись и аудио сохранены ✓');
+    } else if (sessionOk && audioSkipped) {
+      showToast('Запись сохранена ✓ (без аудио)');
+    } else if (sessionOk && !audioOk) {
+      showToast('Текст сохранён, но аудио не загрузилось');
+    } else {
+      showToast('Ошибка при сохранении записи');
+    }
+
+    // ── 4. Reset UI state only after all work is done ──
+    setOrbState('idle');
+    setIsSessionActive(false);
     setSessionId(null);
     messagesRef.current = [];
     setPhotoCount(0);
-
-    // ── 1. Start recording stop (non-blocking, may be a no-op if recording failed) ──
-    let blobPromise: Promise<Blob> | null = null;
-    try {
-      if (conn) blobPromise = conn.stopRecording();
-    } catch { /* recording failure must never block session-end */ }
-
-    // ── 2. Always disconnect WebRTC ──
-    try { conn?.disconnect(); } catch { /* ignore */ }
-
-    // ── 3. Critical: save transcript pipeline — always runs ──
-    if (sid) {
-      console.log('[handleEnd] session_id:', sid, 'messages:', msgs.length);
-      showToast('Сохраняю запись...');
-      fetch('/api/session-end', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sid, messages: msgs }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          console.log('[session-end] response:', data);
-          if (data.skipped) showToast('Разговор слишком короткий, запись не создана');
-          else if (data.ok) showToast('Запись сохранена ✓');
-          else showToast('Ошибка при сохранении');
-        })
-        .catch((err) => {
-          console.error('[session-end] failed:', err);
-          showToast('Ошибка при сохранении: ' + err.message);
-        });
-    } else {
-      console.warn('[handleEnd] no session_id — skipping session-end call');
-    }
-
-    // ── 4. Best-effort: upload audio directly to Supabase (bypasses Vercel body limit) ──
-    if (sid && blobPromise) {
-      blobPromise
-        .then(async (blob) => {
-          if (blob.size < 500) return; // skip empty / near-empty blobs
-          const mime = blob.type || 'audio/webm';
-          // Get a signed upload URL (server → Supabase, no file passes through Vercel)
-          const signRes = await fetch(
-            `/api/session/audio?session_id=${encodeURIComponent(sid)}&intent=upload&mime=${encodeURIComponent(mime)}`
-          );
-          if (!signRes.ok) {
-            console.error('Audio sign URL failed:', await signRes.text());
-            return;
-          }
-          const { signedUrl } = await signRes.json() as { signedUrl: string };
-          // PUT blob directly to Supabase Storage (no Vercel 4.5 MB cap)
-          const uploadRes = await fetch(signedUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': mime, 'x-upsert': 'true' },
-            body: blob,
-          });
-          if (!uploadRes.ok) {
-            console.error('Direct audio upload failed:', uploadRes.status, await uploadRes.text());
-          }
-        })
-        .catch((err) => console.error('Audio upload failed:', err));
-    }
   };
 
   const handleAttach = async (files: FileList) => {
