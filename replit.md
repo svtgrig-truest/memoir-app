@@ -55,6 +55,8 @@ curl -s -X PUT -H "Authorization: token $TOKEN" -H "Content-Type: application/js
 | `app/api/heritage/route.ts` | POST: загрузить файл в Storage, запись в БД |
 | `app/api/heritage/reprocess/route.ts` | POST: Responses API → извлечь текст → кешировать в `summary_text` |
 | `app/api/transcript/reprocess/route.ts` | POST: повторный запуск pipeline для существующей сессии |
+| `app/api/transcript/retranscribe/route.ts` | POST: восстановление потерянных реплик из mic-only аудио (Whisper + GPT-4o merge); body: `{ session_id, dry_run? }` |
+| `scripts/recover-session.ts` | Локальный скрипт для разовых восстановлений: `npx tsx scripts/recover-session.ts <session_id> [--commit]` |
 | `app/archive/layout.tsx` | Server layout: вызывает `requireAuth()`, защищает весь `/archive/` |
 | `app/family/layout.tsx` | Server layout: вызывает `requireAuth()`, защищает весь `/family/` |
 | `app/login/page.tsx` | Страница входа — для редиректов с server pages |
@@ -207,6 +209,18 @@ curl -s -X PUT -H "Authorization: token $TOKEN" -H "Content-Type: application/js
 - Нарратор всегда мужского рода («был», «рассказал»)
 - `?autostart=1` убирается через `window.history.replaceState` сразу после запуска
 - Тема `free` исключена везде
+
+---
+
+## Восстановление потерянных реплик
+
+**Проблема:** при нажатии «Завершить» сразу после слов собеседника WebRTC-канал может закрыться до прихода Whisper-события `conversation.item.input_audio_transcription.completed` — последняя реплика теряется из `raw_text`.
+
+**Защита (онлайн):** `flushPendingTranscription()` в `lib/realtime.ts` коммитит in-flight аудио и ждёт до 7 сек завершения транскрипции перед `pc.close()`. `handleEnd()` в `app/page.tsx` ждёт этот flush перед snapshot сообщений.
+
+**Восстановление (постфактум):** mic-only аудио сохраняется в Supabase Storage (`recordings/<session_id>.{webm|ogg|mp4}`).
+- API: `POST /api/transcript/retranscribe { session_id, dry_run? }` — Whisper расшифровывает аудио → GPT-4o склеивает с существующими вопросами AI → перезапуск polish/tag/summarise pipeline
+- Локально: `npx tsx scripts/recover-session.ts <session_id> [--commit]` (без `--commit` — dry run)
 
 ---
 
