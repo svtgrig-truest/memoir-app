@@ -21,6 +21,83 @@ export interface RealtimeConnection {
   disconnect: () => void;
 }
 
+/**
+ * Wait for any in-flight user audio to finish transcribing on OpenAI's side
+ * before the caller proceeds to disconnect the WebRTC connection.
+ *
+ * Background: user transcripts are emitted via the
+ * `conversation.item.input_audio_transcription.completed` event, which fires
+ * only after Whisper has processed the committed audio buffer on the server.
+ * If the WebRTC data channel is closed (`pc.close()`) before this event
+ * arrives, the user's last reply is silently lost — never reaches the client,
+ * never gets pushed into `messagesRef`, never gets saved by `/api/session-end`.
+ *
+ * This helper:
+ *   1. Sends `input_audio_buffer.commit` to force any pending audio to be
+ *      transcribed (covers the case where End was pressed before VAD's
+ *      silence_duration_ms had elapsed).
+ *   2. Resolves on the next `input_audio_transcription.completed|failed`
+ *      event, OR on an `input_audio_buffer_commit_empty` error (no audio
+ *      pending), OR after `timeoutMs` as a hard upper bound.
+ */
+export function flushPendingTranscription(
+  conn: RealtimeConnection,
+  timeoutMs = 7000
+): Promise<void> {
+  return new Promise((resolve) => {
+    const dc = conn.dc;
+    if (dc.readyState !== 'open') return resolve();
+
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      dc.removeEventListener('message', onMsg);
+      resolve();
+    };
+
+    const timer = setTimeout(finish, timeoutMs);
+
+    const onMsg = (e: MessageEvent) => {
+      try {
+        const ev = JSON.parse(e.data as string) as {
+          type?: string;
+          error?: { code?: string; message?: string };
+        };
+        if (
+          ev.type === 'conversation.item.input_audio_transcription.completed' ||
+          ev.type === 'conversation.item.input_audio_transcription.failed'
+        ) {
+          clearTimeout(timer);
+          finish();
+        }
+        // Commit was a no-op because there is no buffered audio — nothing
+        // to wait for, resolve immediately.
+        if (
+          ev.type === 'error' &&
+          (ev.error?.code === 'input_audio_buffer_commit_empty' ||
+            ev.error?.message?.toLowerCase().includes('buffer is empty') ||
+            ev.error?.message?.toLowerCase().includes('buffer too small'))
+        ) {
+          clearTimeout(timer);
+          finish();
+        }
+      } catch {
+        /* ignore malformed events */
+      }
+    };
+
+    dc.addEventListener('message', onMsg);
+
+    try {
+      dc.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+    } catch {
+      clearTimeout(timer);
+      finish();
+    }
+  });
+}
+
 export function buildSystemPrompt(opts: SystemPromptOptions): string {
   const { chapterTitle, heritageSummary, sessionSummaries, lastChapterShortTitle, lastChapterSummary, recentTranscripts } = opts;
 

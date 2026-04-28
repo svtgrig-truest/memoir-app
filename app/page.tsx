@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { VoiceOrb } from '@/components/VoiceOrb';
-import { connectToRealtime, RealtimeConnection, TurnMessage } from '@/lib/realtime';
+import { connectToRealtime, RealtimeConnection, TurnMessage, flushPendingTranscription } from '@/lib/realtime';
 import { Chapter, OrbState } from '@/types';
 import { Pause, X, ImagePlus, CheckCircle2, Plus, Check } from 'lucide-react';
 import { LoginGate } from '@/components/LoginGate';
@@ -165,6 +165,15 @@ export default function Home() {
 
   const handleEnd = async () => {
     const conn = connectionRef.current;
+
+    // ── 0. Flush any in-flight Whisper transcription before tearing down WebRTC.
+    // Without this, if End is pressed while the user just finished speaking
+    // (or while still speaking), the last user reply is lost: pc.close() kills
+    // the data channel before `input_audio_transcription.completed` arrives.
+    if (conn) {
+      try { await flushPendingTranscription(conn); } catch { /* never block end */ }
+    }
+
     connectionRef.current = null;
     setOrbState('idle');
     setIsSessionActive(false);
