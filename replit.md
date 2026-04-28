@@ -218,6 +218,8 @@ curl -s -X PUT -H "Authorization: token $TOKEN" -H "Content-Type: application/js
 
 **Защита (онлайн):** `flushPendingTranscription()` в `lib/realtime.ts` коммитит in-flight аудио и ждёт до 7 сек завершения транскрипции перед `pc.close()`. `handleEnd()` в `app/page.tsx` ждёт этот flush перед snapshot сообщений.
 
+**Защита загрузки аудио:** `handleEnd()` теперь **awaitит** загрузку аудио в Storage параллельно с `/api/session-end` через `Promise.allSettled`. UI остаётся в активном состоянии (тост «Сохраняю запись... Не закрывайте приложение»), пока обе операции не завершатся. Это исправляет баг, при котором папа закрывал приложение после toast «Запись сохранена», прерывая in-flight PUT аудио в Supabase. Все этапы инструментированы `console.log` (`[handleEnd]`, `[audio-upload]`, `[audio/sign]`) для диагностики через логи Vercel.
+
 **Восстановление (постфактум):** mic-only аудио сохраняется в Supabase Storage (`recordings/<session_id>.{webm|ogg|mp4}`).
 - API: `POST /api/transcript/retranscribe { session_id, dry_run? }` — Whisper расшифровывает аудио → GPT-4o склеивает с существующими вопросами AI → перезапуск polish/tag/summarise pipeline
 - Локально: `npx tsx scripts/recover-session.ts <session_id> [--commit]` (без `--commit` — dry run)
