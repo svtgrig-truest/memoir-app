@@ -29,6 +29,9 @@ export default function Home() {
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const messagesRef = useRef<TurnMessage[]>([]);
   const isConnectingRef = useRef(false);
+  const isEndingRef = useRef(false);
+  const isPausingRef = useRef(false);
+  const isSavingRef = useRef(false);
   const autostartFiredRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -38,6 +41,19 @@ export default function Home() {
   useEffect(() => {
     const ok = document.cookie.split(';').some(c => c.trim().startsWith('app_auth='));
     setAuthed(ok);
+  }, []);
+
+  // Warn the user if they try to close/refresh the tab while we're still
+  // saving session data (transcript + audio upload). Modern browsers show
+  // their own confirmation dialog; the exact text isn't customisable.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!isSavingRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
   }, []);
 
   useEffect(() => {
@@ -154,21 +170,45 @@ export default function Home() {
   const handleOrbClick = () => startSession(selectedChapterId);
 
   const handlePause = async () => {
-    connectionRef.current?.disconnect();
-    connectionRef.current = null;
-    setOrbState('idle');
-    setIsSessionActive(false);
+    // Re-entry guard: pause is async; the button stays mounted until the
+    // session disconnects, so a fast double-tap could fire two pauses.
+    if (isPausingRef.current) return;
+    isPausingRef.current = true;
 
-    if (sessionId) {
-      fetch('/api/session-pause', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      }).catch((err) => console.error('Failed to pause session:', err));
+    try {
+      // Flush in-flight Whisper transcription before tearing down WebRTC,
+      // same reason as handleEnd: pc.close() kills the data channel and any
+      // unfinished transcription event for the user's last sentence is lost.
+      const conn = connectionRef.current;
+      if (conn) {
+        try { await flushPendingTranscription(conn); } catch { /* never block pause */ }
+      }
+
+      conn?.disconnect();
+      connectionRef.current = null;
+      setOrbState('idle');
+      setIsSessionActive(false);
+
+      if (sessionId) {
+        fetch('/api/session-pause', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        }).catch((err) => console.error('Failed to pause session:', err));
+      }
+    } finally {
+      isPausingRef.current = false;
     }
   };
 
   const handleEnd = async () => {
+    // Re-entry guard: handleEnd is async and the End button remains mounted
+    // until the very end of this function (so the user sees the upload
+    // progress toast). Without this guard, two clicks would result in two
+    // parallel POSTs to /api/session-end and a duplicate transcript row.
+    if (isEndingRef.current) return;
+    isEndingRef.current = true;
+    try {
     const conn = connectionRef.current;
 
     // ── 0. Flush any in-flight Whisper transcription before tearing down WebRTC.
@@ -208,6 +248,10 @@ export default function Home() {
     // Tell user not to close — we're saving both transcript and audio.
     // Persistent toast (no auto-dismiss) — replaced below by the final result.
     showToast('Сохраняю запись... Не закрывайте приложение', null);
+
+    // Mark saving — beforeunload handler will warn the user if they try
+    // to close the tab during this window. Cleared in the finally below.
+    isSavingRef.current = true;
 
     // ── 2. Run session-end (server-side, survives client close) and audio upload
     // (client-side, MUST be awaited or browser will abort it on tab close)
@@ -289,6 +333,10 @@ export default function Home() {
     setSessionId(null);
     messagesRef.current = [];
     setPhotoCount(0);
+    } finally {
+      isSavingRef.current = false;
+      isEndingRef.current = false;
+    }
   };
 
   const handleAttach = async (files: FileList) => {
