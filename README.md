@@ -136,3 +136,5 @@ RLS enabled on all tables. All API routes use `supabaseAdmin` (service role key)
 ## Development & deployment
 
 Push to `main` → Vercel rebuilds automatically. File changes are made via GitHub API from the Replit environment. Repo: `svtgrig-truest/memoir-app`.
+
+Last token rotation: 2026-06-11
